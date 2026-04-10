@@ -1,0 +1,2 @@
+# Aplicaci-n-An-lisis-Bibliom-trico
+Aplicación realizada como proyecto final de materia Ingeniería de Sistemas I.
