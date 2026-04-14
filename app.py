@@ -1,30 +1,47 @@
-from flask import Flask, render_template
-from sqlalchemy import create_engine, text
+from flask import Flask, request, jsonify, render_template
+import pandas as pd
+import os
 
 app = Flask(__name__)
-
-# Conexión a base de datos
-engine = create_engine(r'mssql+pyodbc://DellRodrigoEG\SQLEXPRESS01/AplicacionSistemaBibliometrico?driver=ODBC+Driver+17+for+SQL+Server&trusted_connection=yes')
-
-from flask import Flask, render_template
-
-app = Flask(__name__)
+UPLOAD_FOLDER = 'uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 @app.route('/')
-def dashboard():
-    # Flask ya sabe que debe buscar en la carpeta /templates
-    return render_template('html/index.html')
+def index():
+    return render_template("index.html")
 
-
-@app.route('/publicaciones')
-def ver_publicaciones():
-    with engine.connect() as conn:
-        # El cerebro busca en la base de datos
-        query = text("SELECT TOP 20 Titulo, Anio, Citas FROM Publicaciones ORDER BY Anio DESC")
-        datos = conn.execute(query).fetchall()
+@app.route('/upload', methods=['POST'])
+def upload_file():
+    if 'file' not in request.files:
+        return jsonify({"error": "No hay archivo"}), 400
     
-    # El cerebro manda los datos al archivo HTML en /templates
-    return render_template('lista.html', lista_publicaciones=datos)
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "Nombre de archivo vacío"}), 400
+
+    # Guardar archivo
+    filepath = os.path.join(UPLOAD_FOLDER, file.filename)
+    file.save(filepath)
+
+    # Procesar con Pandas
+    try:
+        extension = os.path.splitext(file.filename)[1].lower()
+        if extension == '.csv':
+            df = pd.read_csv(filepath)
+        else:
+            df = pd.read_excel(filepath, engine='openpyxl')
+
+        # Ejemplo: obtener las primeras 5 filas para confirmar
+        datos_previa = df.head().to_dict(orient='records')
+        
+        return jsonify({
+            "mensaje": "Archivo procesado",
+            "columnas": list(df.columns),
+            "previa": datos_previa
+        }), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
