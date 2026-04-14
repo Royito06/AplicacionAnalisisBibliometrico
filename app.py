@@ -6,9 +6,29 @@ app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+# --- Funciones ---
+def leer_archivo_datos(ruta_archivo):
+    """
+    Lee un archivo CSV o Excel y devuelve un DataFrame de Pandas.
+    """
+    extension = os.path.splitext(ruta_archivo)[1].lower()
+    try:
+        if extension == '.csv':
+            df = pd.read_csv(ruta_archivo)
+        elif extension in ['.xls', '.xlsx']:
+            df = pd.read_excel(ruta_archivo, engine='openpyxl')
+        else:
+            return None
+        return df
+    except Exception as e:
+        print(f"Error interno: {e}")
+        return None
+
+# --- RUTAS DE FLASK ---
+
 @app.route('/')
 def index():
-    return render_template("index.html")
+    return render_template('index.html')
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -17,31 +37,28 @@ def upload_file():
     
     file = request.files['file']
     if file.filename == '':
-        return jsonify({"error": "Nombre de archivo vacío"}), 400
+        return jsonify({"error": "Nombre vacío"}), 400
 
-    # Guardar archivo
+    # Se guarda temporalmente
     filepath = os.path.join(UPLOAD_FOLDER, file.filename)
     file.save(filepath)
 
-    # Procesar con Pandas
-    try:
-        extension = os.path.splitext(file.filename)[1].lower()
-        if extension == '.csv':
-            df = pd.read_csv(filepath)
-        else:
-            df = pd.read_excel(filepath, engine='openpyxl')
+    
+    df = leer_archivo_datos(filepath)
 
-        # Ejemplo: obtener las primeras 5 filas para confirmar
-        datos_previa = df.head().to_dict(orient='records')
+    if df is not None:
+        #Aquí se maneja el dataframe
+        columnas = list(df.columns)
+        total_filas = len(df)
         
         return jsonify({
-            "mensaje": "Archivo procesado",
-            "columnas": list(df.columns),
-            "previa": datos_previa
+            "mensaje": "Archivo cargado y procesado",
+            "columnas": columnas,
+            "total_registros": total_filas
         }), 200
+    else:
+        return jsonify({"error": "No se pudo procesar el contenido del archivo"}), 500
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
