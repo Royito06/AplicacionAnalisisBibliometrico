@@ -7,6 +7,18 @@ UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # --- Funciones ---
+# Es la función para filtrar resultados por rango de años 
+def filtrar_por_anio(df, inicio, fin):
+    """
+    Filtra el Dataframe por un rango de años
+    """
+    col_anio = next((c for c in df.columns if 'year' in c.lower() or 'año' in c.lower()), None)
+
+    if col_anio and inicio and fin:
+        df[col_anio] = pd.to.numeric(df[col_anio], errors = 'coerce')
+        return df[(df[col_anio] >=inicio) & (df[col_anio] <= fin)]
+    return df
+
 def leer_archivo_datos(ruta_archivo):
     """
     Lee un archivo CSV o Excel y devuelve un DataFrame de Pandas.
@@ -97,6 +109,12 @@ def upload_file():
         # Se leen los datos
         df = leer_archivo_datos(filepath)
         if df is not None:
+            
+            anio_inicio = request.form.get('anio_inicio', type = int)
+            anio_fin = request.form.get('anio_fin', type = int)
+
+            if anio_inicio and anio_fin:
+                df = filtrar_por_anio(df, anio_inicio, anio_fin)
             resumen = procesar_bibliometria(df, file.filename)
             return jsonify(resumen), 200
         else:
