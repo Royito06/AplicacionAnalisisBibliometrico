@@ -1,15 +1,22 @@
-<script src="https://unpkg.com/dropzone@5/dist/min/dropzone.min.js"></script>
-<link rel="stylesheet" href="https://unpkg.com/dropzone@5/dist/min/dropzone.min.css" type="text/css" />
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Carga de Datos</title>
+    <script src="https://unpkg.com/dropzone@5/dist/min/dropzone.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/dropzone@5/dist/min/dropzone.min.css" type="text/css" />
+</head>
+<body>
 
-<div class="container">
-    <h2>Sube Aquí el archivo a analizar</h2>
-    <form action="/upload" class="dropzone" id="upload-df"></form>
-</div> 
+    <div class="container">
+        <h2>Sube Aquí el archivo a analizar</h2>
+        <form action="/upload" class="dropzone" id="upload-df"></form>
+    </div> 
 
-<script>
-    Dropzone.options.uploadDf = {
+    <script>
+        Dropzone.options.uploadDf = {
             paramName: "file", // El nombre que recibirá el backend
-            maxFilesize: 5,    //Esto es en megabytes
+            maxFilesize: 5,    // Esto es en megabytes
             acceptedFiles: ".csv, .xls, .xlsx",
             dictDefaultMessage: "Arrastra tus archivos aquí o haz clic para subir",
             init: function() {
@@ -19,4 +26,7 @@
                 });
             }
         };
-</script>
+    </script>
+
+</body>
+</html>
