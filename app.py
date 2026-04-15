@@ -6,6 +6,7 @@ import os
 
 # Importamos tu propia función desde el módulo que creamos.
 from src.data_loader import leer_archivo_datos
+from src.metrics import obtener_rango_anios, calcular_promedio_publicaciones, obtener_top_10_autores
 
 # Aquí "instanciamos" la aplicación. Es como crear el objeto principal de tu programa.
 # __name__ es una variable especial de Python que le dice a Flask dónde buscar las cosas.
@@ -62,13 +63,20 @@ def upload_file():
         
         # len() funciona como el .size() de C++, nos da la cantidad total de filas que tiene el archivo.
         total_filas = len(df)
+
+        resultado_anios = obtener_rango_anios(df)
+        resultado_promedio = calcular_promedio_publicaciones(df)
+        top_10 = obtener_top_10_autores(df)
         
         # jsonify convierte nuestro diccionario de Python en un formato JSON que el navegador y Dropzone entienden.
         # El 200 es el código de éxito HTTP.
-        return jsonify({
+        return jsonify ({
             "mensaje": "Archivo cargado y procesado",
             "columnas": columnas,
-            "total_registros": total_filas
+            "total_registros": total_filas,
+            "rango_anios": resultado_anios, # Enviamos el NAY al frontend
+            "promedio_autores": resultado_promedio,
+            "top_10_autores": top_10,
         }), 200
         
     else:
