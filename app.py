@@ -34,7 +34,7 @@ def procesar_bibliometria(df,nombre_archivo):
     
     conteo_vacios = 0
     if col_afiliacion:
-        conteo_vacios = df[col_afiliacion].isna().sum()
+        conteo_vacios = int(df[col_afiliacion].isna().sum())
         df[col_afiliacion] = df [col_afiliacion].fillna('Afiliación Desconocida')
         print(f"Se limpió la columna:{col_afiliacion}")
     else:
@@ -43,10 +43,17 @@ def procesar_bibliometria(df,nombre_archivo):
     #Esto es para el resumen: nomas tira cuantas "filas" tiene el archivo
     total_importados = int(df.shape[0])
     
-    # Resumen: Deja las puras filas con titulos, es para limpiar datos
-    registros_con_titulo = df['Title'].dropna().count() if 'Title' in df.columns else 0
-    
     # Resumen: muestra algo así como un preview de los datos del archivo importado
+    # Para que no truene si no se lama Title mejor buscamos el nombre primero
+    col_titulo = next((c for c in df.columns if 'titl' in c.lower()), None)
+    if col_titulo:
+        # Descubrí que se puede cambiar internamente el nombre de la columna para que
+        # el código siempre use 'Title' de ahí en adelante
+        df.rename(columns={col_titulo: 'Title'}, inplace=True)
+    
+    # Resumen: Deja las puras filas con titulos, es para limpiar datos
+    registros_con_titulo = int(df['Title'].dropna().count()) if 'Title' in df.columns else 0
+    
     libros_resumen = df['Title'].head(5).tolist() if 'Title' in df.columns else []
     autores_resumen = df['Authors'].head(5).tolist() if 'Authors' in df.columns else []  #Revisar si la columna si se llama authors
     
@@ -142,10 +149,10 @@ if __name__ == '__main__':
     
     """
     Esto es para prueba
-    """
+    
 ruta= "simon&pumba.csv"
 dataframe = leer_archivo_datos(ruta)
 resultado_final = procesar_bibliometria(dataframe, os.path.basename(ruta))
 
 print(resultado_final)
-    
+    """
