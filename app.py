@@ -29,7 +29,8 @@ def leer_archivo_datos(ruta_archivo):
 def procesar_bibliometria(df,nombre_archivo):
     if df is None:
         return {"error": "El dataframe está vacío o es inválido"}
-   # Busca una columna que contenga la palabra "Affiliation" o "Institu" sin importar mayúsculas
+    
+    # Busca una columna que contenga la palabra "Affiliation" o "Institu" sin importar mayúsculas
     col_afiliacion = next((c for c in df.columns if 'affilia' in c.lower() or 'institu' in c.lower()), None)
     
     conteo_vacios = 0
@@ -64,7 +65,7 @@ def procesar_bibliometria(df,nombre_archivo):
         },
         
         "metricas": {
-            "total_articulos": total_importados,
+            "total_articulos": total_importados,      
             "articulos_validos": registros_con_titulo,
             "afiliaciones_corregidas": conteo_vacios
         },
