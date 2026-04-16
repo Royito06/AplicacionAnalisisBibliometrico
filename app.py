@@ -1,24 +1,24 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, send_file
 import pandas as pd
 import os
+import io
+from src.cleaner import limpiar_dataset
+from src.metrics import (
+    obtener_rango_anios,
+    calcular_promedio_publicaciones,
+    obtener_top_10_autores,
+    obtner_articulo_sin_citas,
+    excel_descargar,
+    word_descargar
+)
 
 app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+ultimo_df_procesado = None
+
 # --- Funciones ---
-# Es la función para filtrar resultados por rango de años 
-def filtrar_por_anio(df, inicio, fin):
-    """
-    Filtra el Dataframe por un rango de años
-    """
-    col_anio = next((c for c in df.columns if 'year' in c.lower() or 'año' in c.lower()), None)
-
-    if col_anio and inicio and fin:
-        df[col_anio] = pd.to.numeric(df[col_anio], errors = 'coerce')
-        return df[(df[col_anio] >=inicio) & (df[col_anio] <= fin)]
-    return df
-
 def leer_archivo_datos(ruta_archivo):
     """
     Lee un archivo CSV o Excel y devuelve un DataFrame de Pandas.
@@ -89,6 +89,29 @@ def procesar_bibliometria(df,nombre_archivo):
     }
     return resumen
 
+def filtrar_por_anio(df, inicio, fin):
+    """
+    Filtra el Dataframe por un rango de años
+    """
+    col_anio = next((c for c in df.columns if 'year' in c.lower() or 'año' in c.lower()), None)
+
+    if col_anio and inicio is not None and fin is not None:
+        df = df.copy()
+        df[col_anio] = pd.to.numeric(df[col_anio], errors = 'coerce')
+        df = df.dropna(subset = [col_anio])
+        return df[(df[col_anio] >=inicio) & (df[col_anio] <= fin)]
+    return df
+
+def identificar_no_citados(df):
+    """
+    Cuenta cuántos artículos tienen 0 citas en WoS
+    """
+    col_citas = next((c for c in df.columns if 'times cited, wos' in c.lower()), None)
+    if col_citas:
+        conteo_sin_citas = (pd.to_numeric(df[col_citas], errors = 'coerce').fillna(0) == 0).sum()
+        return int(conteo_sin_citas)
+    return 0
+
 # --- RUTAS DE FLASK ---
 
 @app.route('/')
@@ -97,6 +120,8 @@ def index():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
+    global ultimo_df_procesado
+
     if 'file' not in request.files:
         return jsonify({
         "status": "error",
@@ -115,15 +140,25 @@ def upload_file():
         file.save(filepath)
 
         # Se leen los datos
-        df = leer_archivo_datos(filepath)
+        df_original= leer_archivo_datos(filepath)
         if df is not None:
-            
+            df_limpio = limpiar_dataset(df_original)
             anio_inicio = request.form.get('anio_inicio', type = int)
             anio_fin = request.form.get('anio_fin', type = int)
-
             if anio_inicio and anio_fin:
                 df = filtrar_por_anio(df, anio_inicio, anio_fin)
+            ultimo_df_procesado = df.copy()
+            rango = obtener_rango_anios(df_limpio)
+            promedio = calcular_promedio_publicaciones(df_limpio)
+            top_10 = obtener_top_10_autores(df_limpio)
+            total_sin_citas = identificar_no_citados(df_limpio)
             resumen = procesar_bibliometria(df, file.filename)
+            resumen['metricas']['articulos_sin_citas'] = int(total_sin_citas)
+            resumen['analisis_avanzado'] = {
+                "rango": rango,
+                "productividad": promedio,
+                "top_10": top_10
+            }
             return jsonify(resumen), 200
         else:
             return jsonify({
@@ -158,9 +193,37 @@ def upload_file():
             "message": "Error crítico en el servidor.",
             "details": str(e)
         }), 500
-        
-    
 
+# Descargas de archivos(Excel y Word)
+@app.route('/download/excel')
+def descargar_excel():
+    """Genera y descarga el archivo Excel basado en el último procesamiento."""
+    global ultimo_df_procesado
+    if ultimo_df_procesado is not None:
+        # Llamamos a la función de exportación que tienes en metrics.py
+        buffer = excel_descargar(ultimo_df_procesado)
+        return send_file(
+            buffer, 
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True, 
+            download_name='reporte_bibliometrico.xlsx'
+        )
+    return jsonify({"error": "No hay datos procesados disponibles"}), 400
+
+@app.route('/download/word')
+def descargar_word():
+    """Genera y descarga el reporte en Word basado en el último procesamiento."""
+    global ultimo_df_procesado
+    if ultimo_df_procesado is not None:
+        # Llamamos a la función de exportación que tienes en metrics.py
+        buffer = word_descargar(ultimo_df_procesado, titulo="Reporte de Análisis Bibliométrico")
+        return send_file(
+            buffer, 
+            mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            as_attachment=True, 
+            download_name='reporte_bibliometrico.docx'
+        )
+    return jsonify({"error": "No hay datos procesados disponibles"}), 400
 
 if __name__ == '__main__':
     app.run(debug=True)
