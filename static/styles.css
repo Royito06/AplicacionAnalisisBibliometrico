@@ -1,0 +1,160 @@
+h1 {
+    font-family: "Bungee", sans-serif;
+    font-weight: 400;
+    font-style: normal;
+}
+
+html {
+    font-family: "Noto Sans", sans-serif;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    transition-duration: 300ms;
+}
+
+body {
+    min-height: 1000px;
+    background: #0f172a;
+    display: flex;
+    color: white;
+    flex-direction: column;
+    gap: 24px;
+    padding: 24px;
+}
+
+.ptmCreoQueEntendi{
+    display: flex;
+    color: black;
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px;
+}
+
+header,
+main,
+footer {
+    width: 800px;
+    max-width: 100%;
+    margin: 0 auto;
+}
+
+header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+main {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+}
+
+footer {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+}
+
+.plusIcon {
+    font-size: 1.5rem;
+    cursor: pointer;
+}
+
+.plusIcon:hover {
+    color: cyan;
+}
+
+#enterTodo {
+    display: none;
+}
+
+#enterTodo form {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid skyblue;
+    position: relative;
+}
+
+#enterTodo form:focus-within {
+    border-color: cyan;
+}
+
+#enterTodo input {
+
+    background: transparent;
+    outline: none;
+    padding: 12px;
+    color: white;
+    flex: 1;
+    border: none;
+}
+
+#enterTodo button {
+    position: absolute;
+    right: 0;
+    top: 0;
+    height: 100%;
+    background: skyblue;
+    border: none;
+    outline: none;
+    padding: 0 12px;
+    color: #0f172a;
+    font-family: 'Bungee', sans-serif;
+    cursor: pointer;
+}
+
+#enterTodo button:hover {
+    background: #0f172a;
+    color: skyblue;
+
+}
+
+#todos {
+    display: flex;
+    flex-direction: column;
+
+}
+
+.todoItem {
+    display: flex;
+    align-items: center;
+}
+
+.todoItem p {
+    flex: 1;
+}
+
+.actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    cursor: pointer;
+}
+
+.actions i:hover {
+    color: coral;
+}
+
+footer {
+    display: grid;
+    place-items: center;
+}
+
+footer a {
+    color: inherit;
+
+}
+
+footer i {
+    cursor: pointer;
+}
+
+footer i:hover {
+    color: cyan;
+}
