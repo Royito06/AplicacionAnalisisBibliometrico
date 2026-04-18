@@ -2,15 +2,19 @@ from flask import Flask, request, jsonify, render_template, send_file
 import pandas as pd
 import os
 import io
+from src.data_loader import leer_archivo_datos
 from src.cleaner import limpiar_dataset
+ tuno
 from src.metrics import (
     obtener_rango_anios,
     calcular_promedio_publicaciones,
     obtener_top_10_autores,
-    obtner_articulo_sin_citas,
+    obtener_articulo_sin_citas,
     excel_descargar,
     word_descargar
 )
+
+
 
 app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
@@ -19,22 +23,6 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 ultimo_df_procesado = None
 
 # --- Funciones ---
-def leer_archivo_datos(ruta_archivo):
-    """
-    Lee un archivo CSV o Excel y devuelve un DataFrame de Pandas.
-    """
-    extension = os.path.splitext(ruta_archivo)[1].lower()
-    try:
-        if extension == '.csv':
-            df = pd.read_csv(ruta_archivo)
-        elif extension in ['.xls', '.xlsx']:
-            df = pd.read_excel(ruta_archivo)
-        else:
-            return None
-        return df
-    except Exception as e:
-        print(f"Error interno: {e}")
-        return None
 
 # Por el momento solo genera un resumen, para sprints siguientes
 # se espera la bibliometría completa
@@ -70,6 +58,34 @@ def procesar_bibliometria(df,nombre_archivo):
     libros_resumen = df['Title'].head(5).tolist() if 'Title' in df.columns else []
     autores_resumen = df['Authors'].head(5).tolist() if 'Authors' in df.columns else []  #Revisar si la columna si se llama authors
     
+    #--- TOPS ---
+    
+    col_revista = next((c for c in df.columns if 'source' in c.lower() or 'journal' in c.lower()), None)
+    col_citas = next((c for c in df.columns if 'cite' in c.lower() or 'cited by' in c.lower()), None)
+    col_ciudad = next((c for c in df.columns if 'city' in c.lower()), None)
+    
+    # Top 10 Revistas
+    top_revistas = []
+    if col_revista:
+        top_revistas = df[col_revista].value_counts().head(10).reset_index().values.tolist()
+
+    # Trabajos más citados (Top 10 descendente)
+    top_citados = []
+    if col_titulo and col_citas:
+        # Convertimos citas a numérico por si vienen como texto
+        df[col_citas] = pd.to_numeric(df[col_citas], errors='coerce').fillna(0)
+        top_citados = df.sort_values(by=col_citas, ascending=False).head(10)[[col_titulo, col_citas]].values.tolist()
+        
+    top_Afiliaciones = []
+    top_Ciudades = []
+    # Afiliaciones 
+    if col_afiliacion:
+        # Extraer universidades (primer elemento antes de la primera coma)
+        top_Afiliaciones= df[col_afiliacion].str.split(',').str[0].value_counts().head(10).reset_index().values.tolist()
+    if col_ciudad:
+        # Extraer países (último elemento después de la última coma)
+        top_Ciudades = df[col_ciudad].str.split(',').str[-1].str.strip().value_counts().head(10).reset_index().values.tolist()
+    
     resumen = {
         "confirmación": {
             "archivo": nombre_archivo,
@@ -85,6 +101,14 @@ def procesar_bibliometria(df,nombre_archivo):
             "libros": libros_resumen,
             "autores": autores_resumen
         },
+        "tops": {
+            "revistas": top_revistas,  
+            "citados": top_citados     
+        },
+        "Afiliaciones": {
+            "ciudades": top_Ciudades,
+            "Afiliaciones" : top_Afiliaciones
+        }
         
     }
     return resumen
@@ -97,7 +121,7 @@ def filtrar_por_anio(df, inicio, fin):
 
     if col_anio and inicio is not None and fin is not None:
         df = df.copy()
-        df[col_anio] = pd.to.numeric(df[col_anio], errors = 'coerce')
+        df[col_anio] = pd.to_numeric(df[col_anio], errors = 'coerce')
         df = df.dropna(subset = [col_anio])
         return df[(df[col_anio] >=inicio) & (df[col_anio] <= fin)]
     return df
@@ -120,7 +144,7 @@ def index():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    global ultimo_df_procesado
+    #global ultimo_df_procesado
 
     if 'file' not in request.files:
         return jsonify({
@@ -135,23 +159,24 @@ def upload_file():
         "message": "Operación cancelada: No se seleccionó ningún archivo/Nombre vacío."
     }), 400
     try: 
-    # Se guarda temporalmente
+        # Se guarda temporalmente
         filepath = os.path.join(UPLOAD_FOLDER, file.filename)
         file.save(filepath)
 
         # Se leen los datos
-        df_original= leer_archivo_datos(filepath)
+        df = leer_archivo_datos(filepath)
         if df is not None:
-            df_limpio = limpiar_dataset(df_original)
+            df = limpiar_dataset(df)
             anio_inicio = request.form.get('anio_inicio', type = int)
             anio_fin = request.form.get('anio_fin', type = int)
             if anio_inicio and anio_fin:
                 df = filtrar_por_anio(df, anio_inicio, anio_fin)
+            
             ultimo_df_procesado = df.copy()
-            rango = obtener_rango_anios(df_limpio)
-            promedio = calcular_promedio_publicaciones(df_limpio)
-            top_10 = obtener_top_10_autores(df_limpio)
-            total_sin_citas = identificar_no_citados(df_limpio)
+            rango = obtener_rango_anios(df)
+            promedio = calcular_promedio_publicaciones(df)
+            top_10 = obtener_top_10_autores(df)
+            total_sin_citas = identificar_no_citados(df)
             resumen = procesar_bibliometria(df, file.filename)
             resumen['metricas']['articulos_sin_citas'] = int(total_sin_citas)
             resumen['analisis_avanzado'] = {

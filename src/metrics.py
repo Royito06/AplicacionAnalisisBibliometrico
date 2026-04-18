@@ -130,7 +130,7 @@ def obtener_top_10_autores(df):
 
 #--------------------------------------------------------------------------------------------
 
-def obtner_articulo_sin_citas(df):
+def obtener_articulo_sin_citas(df):
     """
     Identifica artículos con 0 citas en Web Of Science
     """
