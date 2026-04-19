@@ -1,0 +1,20 @@
+@app.route('/universidad/<nombre_universidad>')
+def articulos_universidad(nombre_universidad):
+    # Verificamos si hay un archivo cargado
+    archivos = os.listdir(UPLOAD_FOLDER)
+    if not archivos:
+        return "Primero debes subir un archivo en la página principal."
+        
+    ruta_archivo = os.path.join(UPLOAD_FOLDER, archivos[0])
+    df = leer_archivo_datos(ruta_archivo)
+    
+    if df is not None:
+        # Llamamos a la nueva función pasándole el nombre que se escribió en la URL
+        articulos_encontrados = obtener_articulos_por_universidad(df, nombre_universidad)
+        
+        # Le mandamos los datos al HTML
+        return render_template('universidad.html', 
+                               nombre_buscado=nombre_universidad, 
+                               articulos=articulos_encontrados)
+    else:
+        return "Error al leer el archivo."
