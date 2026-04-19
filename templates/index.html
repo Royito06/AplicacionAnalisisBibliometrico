@@ -1,10 +1,5 @@
 <!DOCTYPE html>
 <html lang="es">
-
-
-<script src="https://unpkg.com/dropzone@5/dist/min/dropzone.min.js"></script>
-<link rel="stylesheet" href="https://unpkg.com/dropzone@5/dist/min/dropzone.min.css" type="text/css" />
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -16,6 +11,8 @@
         href="https://fonts.googleapis.com/css2?family=Bungee&family=Noto+Sans:ital,wght@0,100..900;1,100..900&display=swap">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    
+    <link rel="stylesheet" href="https://unpkg.com/dropzone@5/dist/min/dropzone.min.css" type="text/css" />
 </head>
 
 <body>
@@ -54,7 +51,7 @@
 
 
 
-
+<script src="https://unpkg.com/dropzone@5/dist/min/dropzone.min.js"></script>
 </body>
 <!--
 <h5>
@@ -73,9 +70,9 @@
 </h5>
 -->
 
-<script>
+<script type="text/javascript">
     Dropzone.options.uploadDf = {
-        paramName: "file", // Coincide con request.files['file'] en tu Python
+        paramName: "file", 
         maxFilesize: 10,
         acceptedFiles: ".csv, .xls, .xlsx",
         dictDefaultMessage: "Arrastra tus archivos aquí o haz clic para subir",
@@ -99,6 +96,7 @@
             });
         }
     };
+
 </script>
 
 </html>

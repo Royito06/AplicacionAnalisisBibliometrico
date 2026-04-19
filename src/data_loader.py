@@ -18,48 +18,84 @@ def leer_archivo_datos(ruta_archivo):
     except Exception as e:
         return {"error": "Error interno: {e}"}
     """
-    
 def leer_archivo_datos(filepath):
-    
-    try:
-        ext = filepath.lower().split('.')[-1]
+    import pandas as pd
+    import os
 
-        if ext == 'xls':
+    try:
+        ext = os.path.splitext(filepath)[1].lower()
+
+        df = None
+
+        # ------------------- XLS -------------------
+        if ext == '.xls':
             try:
-                df = pd.read_excel(filepath, engine='xlrd')
+                # Intento normal (pandas decide)
+                return pd.read_excel(filepath)
+            
             except Exception as e:
-                print("Fallo como Excel:", e)
-                print("Intentando como archivo flexible...")
+                print(" Fallo lectura estándar:", e)
+
+                # Intento con xlrd explícito 
+                try:
+                    return pd.read_excel(filepath, engine="xlrd")
+                except Exception as e2:
+                    print(" Fallo con xlrd:", e2)
+
+                    # Último intento: HTML disfrazado 
+                    try:
+                        print(" Intentando como HTML disfrazado...")
+                        tablas = pd.read_html(filepath)
+                        if tablas:
+                            return tablas[0]
+                    except Exception as e3:
+                        print(" Tampoco es HTML:", e3)
+
+                    raise ValueError("No se pudo leer el archivo .xls en ningún formato")
+
+        # ------------------- XLSX  -------------------
+        elif ext == '.xlsx':
+            try:
+                df = pd.read_excel(filepath, engine='openpyxl')
+            except Exception as e:
+                print(" Error leyendo .xlsx:", e)
+                raise ValueError("El archivo .xlsx no se pudo leer")
+
+        # ------------------- CSV -------------------
+        elif ext == '.csv':
+            try:
                 df = pd.read_csv(
                     filepath,
-                    sep=None,
-                    engine='python',
                     encoding='latin1',
-                    on_bad_lines='skip',
-                    quotechar='"'
+                    sep=None,              
+                    engine='python',
+                    on_bad_lines='skip'
                 )
-        
-        elif ext == 'xlsx':
-            df = pd.read_excel(filepath, engine='openpyxl')
-        
-        elif ext == 'csv':
-            df = pd.read_csv(filepath, encoding='latin1', on_bad_lines='skip')
-        
+            except Exception as e:
+                print(" Error leyendo CSV:", e)
+                raise ValueError("El archivo CSV no se pudo leer")
+
         else:
-            raise ValueError("Formato no soportado")
+            raise ValueError(f"Formato no soportado: {ext}")
 
-        if df is None or df.empty:
-            print("DataFrame vacío o inválido")
-            return None
+        # ------------------- LIMPIEZA CLAVE 🔧 -------------------
+        if df is not None:
+            # Quitar espacios invisibles en nombres de columnas
+            df.columns = df.columns.str.strip()
 
-        # Limpieza básica
-        df.columns = [col.strip() for col in df.columns]
+            # Eliminar columnas completamente vacías
+            df = df.dropna(axis=1, how='all')
 
-        print("Columnas detectadas:", df.columns.tolist())
-        print(df.head(2))
+            # Eliminar filas completamente vacías
+            df = df.dropna(how='all')
 
-        return df
-    
+            print("✅ Columnas detectadas:", df.columns.tolist())
+            print(df.head(2))
+
+            return df
+
+        return None
+
     except Exception as e:
-        print("ERROR LEYENDO ARCHIVO:", e)
+        print("🚨 ERROR LEYENDO ARCHIVO:", e)
         return None

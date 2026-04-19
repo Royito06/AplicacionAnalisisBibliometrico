@@ -4,7 +4,7 @@ import os
 import io
 from src.data_loader import leer_archivo_datos
 from src.cleaner import limpiar_dataset
- tuno
+
 from src.metrics import (
     obtener_rango_anios,
     calcular_promedio_publicaciones,
@@ -26,74 +26,105 @@ ultimo_df_procesado = None
 
 # Por el momento solo genera un resumen, para sprints siguientes
 # se espera la bibliometría completa
-def procesar_bibliometria(df,nombre_archivo):
-    if df is None:
+def procesar_bibliometria(df, nombre_archivo):
+    if df is None or df.empty:
         return {"error": "El dataframe está vacío o es inválido"}
-    
-    # Busca una columna que contenga la palabra "Affiliation" o "Institu" sin importar mayúsculas
+
+    #  Normalizar columnas (clave)
+    df.columns = df.columns.str.strip()
+
+    print("Columnas detectadas:", df.columns.tolist())
+
+    #  Mapear nombres comunes (WoS/Scopus/etc)
+    mapa_columnas = {
+        'ti': 'Title',
+        'article title': 'Title',
+        'article titles': 'Title',
+        'au': 'Authors',
+        'authors': 'Authors',
+        'py': 'Year'
+    }
+
+    for col in df.columns:
+        key = col.lower().strip()
+        if key in mapa_columnas:
+            df.rename(columns={col: mapa_columnas[key]}, inplace=True)
+
+    # ---------------- Afiliaciones ----------------
     col_afiliacion = next((c for c in df.columns if 'affilia' in c.lower() or 'institu' in c.lower()), None)
-    
+
     conteo_vacios = 0
     if col_afiliacion:
         conteo_vacios = int(df[col_afiliacion].isna().sum())
-        df[col_afiliacion] = df [col_afiliacion].fillna('Afiliación Desconocida')
-        print(f"Se limpió la columna:{col_afiliacion}")
+        df[col_afiliacion] = df[col_afiliacion].fillna('Afiliación Desconocida')
+        print(f"Se limpió la columna: {col_afiliacion}")
     else:
         print("No se encontró columna de afiliación.")
-    
-    #Esto es para el resumen: nomas tira cuantas "filas" tiene el archivo
+
     total_importados = int(df.shape[0])
+
+    # ---------------- TITULOS ----------------
+    if 'Title' not in df.columns:
+        print(" No se encontró columna Title")
     
-    # Resumen: muestra algo así como un preview de los datos del archivo importado
-    # Para que no truene si no se lama Title mejor buscamos el nombre primero
-    col_titulo = next((c for c in df.columns if 'titl' in c.lower()), None)
-    if col_titulo:
-        # Descubrí que se puede cambiar internamente el nombre de la columna para que
-        # el código siempre use 'Title' de ahí en adelante
-        df.rename(columns={col_titulo: 'Title'}, inplace=True)
-    
-    # Resumen: Deja las puras filas con titulos, es para limpiar datos
     registros_con_titulo = int(df['Title'].dropna().count()) if 'Title' in df.columns else 0
-    
-    libros_resumen = df['Title'].head(5).tolist() if 'Title' in df.columns else []
-    autores_resumen = df['Authors'].head(5).tolist() if 'Authors' in df.columns else []  #Revisar si la columna si se llama authors
-    
-    #--- TOPS ---
-    
+    libros_resumen = df['Title'].dropna().head(20).tolist() if 'Title' in df.columns else []
+
+    print("Ejemplo títulos:", libros_resumen[:3])
+
+    # ---------------- AUTORES ----------------
+    autores_resumen = df['Authors'].dropna().head(20).tolist() if 'Authors' in df.columns else []
+
+    # ---------------- TOPS ----------------
     col_revista = next((c for c in df.columns if 'source' in c.lower() or 'journal' in c.lower()), None)
-    col_citas = next((c for c in df.columns if 'cite' in c.lower() or 'cited by' in c.lower()), None)
+    col_citas = next((c for c in df.columns if 'cite' in c.lower()), None)
     col_ciudad = next((c for c in df.columns if 'city' in c.lower()), None)
-    
-    # Top 10 Revistas
+
     top_revistas = []
     if col_revista:
         top_revistas = df[col_revista].value_counts().head(10).reset_index().values.tolist()
 
-    # Trabajos más citados (Top 10 descendente)
+    # 🔥 FIX IMPORTANTE AQUÍ
     top_citados = []
-    if col_titulo and col_citas:
-        # Convertimos citas a numérico por si vienen como texto
+    if 'Title' in df.columns and col_citas:
         df[col_citas] = pd.to_numeric(df[col_citas], errors='coerce').fillna(0)
-        top_citados = df.sort_values(by=col_citas, ascending=False).head(10)[[col_titulo, col_citas]].values.tolist()
-        
+        top_citados = df.sort_values(by=col_citas, ascending=False)\
+                        .head(10)[['Title', col_citas]].values.tolist()
+
+    # ---------------- Afiliaciones ----------------
     top_Afiliaciones = []
     top_Ciudades = []
-    # Afiliaciones 
+
     if col_afiliacion:
-        # Extraer universidades (primer elemento antes de la primera coma)
-        top_Afiliaciones= df[col_afiliacion].str.split(',').str[0].value_counts().head(10).reset_index().values.tolist()
+        top_Afiliaciones = df[col_afiliacion].astype(str)\
+            .str.split(',').str[0]\
+            .value_counts().head(10).reset_index().values.tolist()
+
+    #if col_ciudad:
+    #    top_Ciudades = df[col_ciudad].astype(str)\
+    #        .str.split(',').str[-1].str.strip()\
+    #        .value_counts().head(10).reset_index().values.tolist()
     if col_ciudad:
-        # Extraer países (último elemento después de la última coma)
-        top_Ciudades = df[col_ciudad].str.split(',').str[-1].str.strip().value_counts().head(10).reset_index().values.tolist()
-    
+        top_Ciudades = (
+            df[col_ciudad]
+            .dropna()                          # elimina NaN reales antes de convertir
+            .astype(str)
+            .str.strip()
+            .loc[lambda s: s != '']            # descarta strings vacíos
+            .str.split(',')
+            .apply(lambda x: x[-1].strip() if isinstance(x, list) and len(x) > 0 else None)
+            .dropna()                          # elimina los None resultantes
+            .value_counts().head(10).reset_index().values.tolist()
+    )
+
+    # ---------------- Resultado ----------------
     resumen = {
         "confirmación": {
             "archivo": nombre_archivo,
             "mensaje": "Carga y procesamiento exitoso"
         },
-        
         "metricas": {
-            "total_articulos": total_importados,      
+            "total_articulos": total_importados,
             "articulos_validos": registros_con_titulo,
             "afiliaciones_corregidas": conteo_vacios
         },
@@ -102,15 +133,15 @@ def procesar_bibliometria(df,nombre_archivo):
             "autores": autores_resumen
         },
         "tops": {
-            "revistas": top_revistas,  
-            "citados": top_citados     
+            "revistas": top_revistas,
+            "citados": top_citados
         },
         "Afiliaciones": {
             "ciudades": top_Ciudades,
-            "Afiliaciones" : top_Afiliaciones
+            "Afiliaciones": top_Afiliaciones
         }
-        
     }
+
     return resumen
 
 def filtrar_por_anio(df, inicio, fin):
@@ -251,6 +282,7 @@ def descargar_word():
     return jsonify({"error": "No hay datos procesados disponibles"}), 400
 
 if __name__ == '__main__':
+    
     app.run(debug=True)
     
     
