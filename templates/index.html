@@ -1,15 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Análisis Bibliométrico</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Bungee&family=Noto+Sans:ital,wght@0,100..900;1,100..900&display=swap">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    
+    <link rel="stylesheet" href="https://unpkg.com/dropzone@5/dist/min/dropzone.min.css" type="text/css" />
+</head>
+
+<body>
+    <header>
+        <!--
+        <div style="display:inline-block;">
+            <h1>Actividades del Hogar</h1>
+        </div>
+        <div style="display:inline-block;">
+            <i id="showEnterTodo" class="fa-solid fa-plus plusIcon"></i>
+        </div>
+        -->
+    </header>
+
+    <main>
+        <div class="container">
+            <h1>Aplicación de Análisis Bibliométrico</h1>
+
+            
+            </form>
+        </div>
+        <div class="ptmCreoQueEntendi">
+            <form action="/upload" class="dropzone" id="upload-df" method="POST" enctype="multipart/form-data"></form>
+        </div>
+        <section id="enterTodo">
+            <form>
+                <input type="text" id="textInput" placeholder="Agregar tarea" />
+                <button type="input" id="add">Add</button>
+            </form>
+            Agregar tarea
+        </section>
+        <section id="todos">
+
+        </section>
+    </main>
+
+
+
 <script src="https://unpkg.com/dropzone@5/dist/min/dropzone.min.js"></script>
-<link rel="stylesheet" href="https://unpkg.com/dropzone@5/dist/min/dropzone.min.css" type="text/css" />
-
-<div class="container">
-    <h2>Sube Aquí el archivo a analizar</h2>
-    <form action="/upload" class="dropzone" id="upload-df"></form>
-</div> 
-
-<script>
+</body>
+<!--
+<h5>
     Dropzone.options.uploadDf = {
             paramName: "file", // El nombre que recibirá el backend
-            maxFilesize: 5,    //Esto es en megabytes
+            maxFilesize: 5,    // Esto es en megabytes
             acceptedFiles: ".csv, .xls, .xlsx",
             dictDefaultMessage: "Arrastra tus archivos aquí o haz clic para subir",
             init: function() {
@@ -19,4 +67,36 @@
                 });
             }
         };
+</h5>
+-->
+
+<script type="text/javascript">
+    Dropzone.options.uploadDf = {
+        paramName: "file", 
+        maxFilesize: 10,
+        acceptedFiles: ".csv, .xls, .xlsx",
+        dictDefaultMessage: "Arrastra tus archivos aquí o haz clic para subir",
+
+        init: function () {
+            // Esta función se ejecuta cuando Flask responde con éxito (return jsonify, 200)
+            this.on("success", function (file, response) {
+                console.log("Resumen del servidor:", response);
+
+                // Accedemos a los datos de tu 'resumen_rodrigo'
+                const total = response.metricas.total_articulos;
+                const libros = response.resumen_contenido.libros.join(", ");
+
+                // En lugar de un simple alert, puedes escribirlo en el HTML
+                alert(`¡Éxito! Se cargaron ${total} artículos.\nEjemplos: ${libros}`);
+            });
+
+            this.on("error", function (file, message) {
+                // Por si Flask devuelve un error 400 o 500
+                alert("Error: " + (message.message || message));
+            });
+        }
+    };
+
 </script>
+
+</html>
