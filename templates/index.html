@@ -4,99 +4,119 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Análisis Bibliométrico</title>
-
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Bungee&family=Noto+Sans:ital,wght@0,100..900;1,100..900&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Noto+Sans:wght@400;700&display=swap">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-    
     <link rel="stylesheet" href="https://unpkg.com/dropzone@5/dist/min/dropzone.min.css" type="text/css" />
 </head>
-
 <body>
-    <header>
-        <!--
-        <div style="display:inline-block;">
-            <h1>Actividades del Hogar</h1>
-        </div>
-        <div style="display:inline-block;">
-            <i id="showEnterTodo" class="fa-solid fa-plus plusIcon"></i>
-        </div>
-        -->
-    </header>
-
     <main>
         <div class="container">
             <h1>Aplicación de Análisis Bibliométrico</h1>
-
-            
-            </form>
         </div>
+
         <div class="ptmCreoQueEntendi">
             <form action="/upload" class="dropzone" id="upload-df" method="POST" enctype="multipart/form-data"></form>
         </div>
-        <section id="enterTodo">
-            <form>
-                <input type="text" id="textInput" placeholder="Agregar tarea" />
-                <button type="input" id="add">Add</button>
-            </form>
-            Agregar tarea
-        </section>
-        <section id="todos">
 
+        <section id="resultados" style="display:none; margin: 20px auto; max-width: 900px; padding: 20px; border: 1px solid #ccc; border-radius: 8px;">
+            
+            <div style="text-align: center; margin-bottom: 30px;">
+                <h2><i class="fa-solid fa-cloud"></i> Nube de Palabras</h2>
+                <img id="imagen-nube" src="" style="max-width: 100%; border-radius: 8px; display: none; margin: 0 auto;" />
+            </div>
+
+            <div style="margin-bottom: 30px;">
+                <h2><i class="fa-solid fa-chart-line"></i> Impacto y Crecimiento</h2>
+                <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 300px;">
+                        <table style="width:100%; border-collapse: collapse;">
+                            <thead>
+                                <tr style="background: #f4f4f4;">
+                                    <th style="padding: 10px; border: 1px solid #ddd;">Título</th>
+                                    <th style="padding: 10px; border: 1px solid #ddd;">Citas/Año</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cuerpo-citas"></tbody>
+                        </table>
+                    </div>
+                    <div style="flex: 0.5; min-width: 200px; background: #fafafa; padding: 15px; border-radius: 8px;">
+                        <h3>Crecimiento Anual</h3>
+                        <ul id="lista-crecimiento" style="list-style: none; padding: 0;"></ul>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: center;">
+                <a href="/download/excel" style="text-decoration:none; background:#28a745; color:white; padding:12px 20px; border-radius:5px;"><i class="fa-solid fa-file-excel"></i> Excel</a>
+                <a href="/download/word" style="text-decoration:none; background:#007bff; color:white; padding:12px 20px; border-radius:5px;"><i class="fa-solid fa-file-word"></i> Word</a>
+            </div>
+
+            <h3 style="margin-top:40px;"><i class="fa-solid fa-clock-rotate-left"></i> Historial de Proyectos</h3>
+            <table style="width:100%; border-collapse: collapse; font-size: 0.85em;">
+                <thead>
+                    <tr style="background: #eee;">
+                        <th style="padding: 8px; border: 1px solid #ddd;">Archivo</th>
+                        <th style="padding: 8px; border: 1px solid #ddd;">Filtros</th>
+                        <th style="padding: 8px; border: 1px solid #ddd;">Fecha</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-historial"></tbody>
+            </table>
         </section>
     </main>
 
-
-
-<script src="https://unpkg.com/dropzone@5/dist/min/dropzone.min.js"></script>
-</body>
-<!--
-<h5>
-    Dropzone.options.uploadDf = {
-            paramName: "file", // El nombre que recibirá el backend
-            maxFilesize: 5,    // Esto es en megabytes
+    <script src="https://unpkg.com/dropzone@5/dist/min/dropzone.min.js"></script>
+    <script type="text/javascript">
+        Dropzone.options.uploadDf = {
+            paramName: "file", 
+            maxFilesize: 20,
             acceptedFiles: ".csv, .xls, .xlsx",
-            dictDefaultMessage: "Arrastra tus archivos aquí o haz clic para subir",
-            init: function() {
-                this.on("success", function(file, response) {
-                    console.log("Archivo procesado:", response);
-                    alert("Datos cargados correctamente");
+            dictDefaultMessage: "Arrastra archivos aquí para analizar",
+            init: function () {
+                this.on("success", function (file, response) {
+                    document.getElementById('resultados').style.display = 'block';
+
+                    if (response.wordcloud) {
+                        const img = document.getElementById('imagen-nube');
+                        img.src = "data:image/png;base64," + response.wordcloud;
+                        img.style.display = "block";
+                    }
+
+                    const cuerpoCitas = document.getElementById('cuerpo-citas');
+                    cuerpoCitas.innerHTML = ""; 
+                    response.analisis_avanzado.top_citas_anuales.forEach(art => {
+                        cuerpoCitas.innerHTML += `<tr>
+                            <td style="padding: 8px; border: 1px solid #ddd; font-size:0.9em;">${art.Title}</td>
+                            <td style="padding: 8px; border: 1px solid #ddd; text-align:center;">${art.promedio_citas_anual.toFixed(2)}</td>
+                        </tr>`;
+                    });
+
+                    const listaC = document.getElementById('lista-crecimiento');
+                    listaC.innerHTML = "";
+                    response.analisis_avanzado.tasa_crecimiento.forEach(item => {
+                        const color = item.crecimiento >= 0 ? "#28a745" : "#dc3545";
+                        listaC.innerHTML += `<li><strong>${item.anio}:</strong> <span style="color:${color}">${item.crecimiento > 0 ? '+':''}${item.crecimiento}%</span></li>`;
+                    });
+
+                    fetch('/historial')
+                        .then(res => res.json())
+                        .then(data => {
+                            const tablaH = document.getElementById('tabla-historial');
+                            tablaH.innerHTML = "";
+                            data.datos.forEach(reg => {
+                                tablaH.innerHTML += `<tr>
+                                    <td style="padding: 8px; border: 1px solid #ddd;">${reg.archivo}</td>
+                                    <td style="padding: 8px; border: 1px solid #ddd; text-align:center;">${reg.filtro_inicio} - ${reg.filtro_fin}</td>
+                                    <td style="padding: 8px; border: 1px solid #ddd;">${reg.fecha}</td>
+                                </tr>`;
+                            });
+                        });
                 });
             }
         };
-</h5>
--->
-
-<script type="text/javascript">
-    Dropzone.options.uploadDf = {
-        paramName: "file", 
-        maxFilesize: 10,
-        acceptedFiles: ".csv, .xls, .xlsx",
-        dictDefaultMessage: "Arrastra tus archivos aquí o haz clic para subir",
-
-        init: function () {
-            // Esta función se ejecuta cuando Flask responde con éxito (return jsonify, 200)
-            this.on("success", function (file, response) {
-                console.log("Resumen del servidor:", response);
-
-                // Accedemos a los datos de tu 'resumen_rodrigo'
-                const total = response.metricas.total_articulos;
-                const libros = response.resumen_contenido.libros.join(", ");
-
-                // En lugar de un simple alert, puedes escribirlo en el HTML
-                alert(`¡Éxito! Se cargaron ${total} artículos.\nEjemplos: ${libros}`);
-            });
-
-            this.on("error", function (file, message) {
-                // Por si Flask devuelve un error 400 o 500
-                alert("Error: " + (message.message || message));
-            });
-        }
-    };
-
-</script>
-
+    </script>
+</body>
 </html>
