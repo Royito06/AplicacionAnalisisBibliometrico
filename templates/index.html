@@ -1,22 +1,193 @@
-<script src="https://unpkg.com/dropzone@5/dist/min/dropzone.min.js"></script>
-<link rel="stylesheet" href="https://unpkg.com/dropzone@5/dist/min/dropzone.min.css" type="text/css" />
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Análisis Bibliométrico Pro</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Noto+Sans:wght@400;700&display=swap">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    
+    <!-- Librerías Externas -->
+    <link rel="stylesheet" href="https://unpkg.com/dropzone@5/dist/min/dropzone.min.css" type="text/css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <main>
+        <div class="container">
+            <h1>Análisis Bibliométrico</h1>
+        </div>
 
-<div class="container">
-    <h2>Sube Aquí el archivo a analizar</h2>
-    <form action="/upload" class="dropzone" id="upload-df"></form>
-</div> 
+        <div class="ptmCreoQueEntendi">
+            <form action="/upload" class="dropzone" id="upload-df" method="POST" enctype="multipart/form-data"></form>
+        </div>
 
-<script>
-    Dropzone.options.uploadDf = {
-            paramName: "file", // El nombre que recibirá el backend
-            maxFilesize: 5,    //Esto es en megabytes
+        <section id="resultados" style="display:none; margin: 20px auto; max-width: 1000px; padding: 20px; border: 1px solid #ccc; border-radius: 8px; background: white;">
+            
+            <!-- 1. Nube de Palabras -->
+            <div style="text-align: center; margin-bottom: 30px;">
+                <h2><i class="fa-solid fa-cloud"></i> Nube de Palabras</h2>
+                <img id="imagen-nube" src="" style="max-width: 100%; border-radius: 8px; display: none; margin: 0 auto; border: 1px solid #eee;" />
+            </div>
+
+            <!-- 2. Idiomas -->
+            <div style="margin-bottom: 30px; background: #fdfdfd; padding: 15px; border-radius: 8px; border: 1px solid #eee;">
+                <h2><i class="fa-solid fa-language"></i> Distribución por Idioma</h2>
+                <div id="contenedor-idiomas" style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px;"></div>
+            </div>
+
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 30px 0;">
+
+            <div style="display: grid; grid-template-columns: 1fr 300px; gap: 20px;">
+                <!-- 3. Top 10 Autores con Switch -->
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h2><i class="fa-solid fa-users"></i> Top 10 Autores</h2>
+                        <button onclick="alternarVistaTop10()" style="padding: 6px 12px; cursor: pointer; border-radius: 20px; border: 1px solid #007bff; background: white; color: #007bff; font-weight: bold;">
+                            <i class="fa-solid fa-right-left"></i> Cambiar Vista
+                        </button>
+                    </div>
+
+                    <div id="vista-tabla-autores">
+                        <table style="width:100%; border-collapse: collapse;">
+                            <thead>
+                                <tr style="background: #f4f4f4;">
+                                    <th style="padding: 10px; border: 1px solid #ddd;">Autor</th>
+                                    <th style="padding: 10px; border: 1px solid #ddd;">Artículos</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cuerpo-autores"></tbody>
+                        </table>
+                    </div>
+
+                    <div id="vista-grafico-autores" style="display: none; background: #fff; padding: 10px; border: 1px solid #eee;">
+                        <canvas id="chartAutores"></canvas>
+                    </div>
+                </div>
+
+                <!-- 4. Crecimiento Anual -->
+                <div style="background: #fafafa; padding: 15px; border-radius: 8px; border: 1px solid #eee;">
+                    <h3>Crecimiento Anual</h3>
+                    <ul id="lista-crecimiento" style="list-style: none; padding: 0; font-size: 0.9em;"></ul>
+                </div>
+            </div>
+
+            <!-- 5. Descargas -->
+            <div style="margin: 40px 0; display: flex; gap: 15px; justify-content: center;">
+                <a href="/download/excel" style="text-decoration:none; background:#28a745; color:white; padding:12px 25px; border-radius:5px; font-weight: bold;">
+                    <i class="fa-solid fa-file-excel"></i> Exportar Excel
+                </a>
+                <a href="/download/word" style="text-decoration:none; background:#007bff; color:white; padding:12px 25px; border-radius:5px; font-weight: bold;">
+                    <i class="fa-solid fa-file-word"></i> Exportar Word
+                </a>
+            </div>
+
+            <!-- 6. Historial -->
+            <h3 style="margin-top:40px; border-top: 2px solid #eee; padding-top: 20px;">
+                <i class="fa-solid fa-clock-rotate-left"></i> Historial de la Sesión
+            </h3>
+            <table style="width:100%; border-collapse: collapse; font-size: 0.85em; margin-top: 10px;">
+                <thead>
+                    <tr style="background: #eee;">
+                        <th style="padding: 8px; border: 1px solid #ddd;">Archivo</th>
+                        <th style="padding: 8px; border: 1px solid #ddd;">Rango</th>
+                        <th style="padding: 8px; border: 1px solid #ddd;">Fecha</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-historial"></tbody>
+            </table>
+        </section>
+    </main>
+
+    <script src="https://unpkg.com/dropzone@5/dist/min/dropzone.min.js"></script>
+    <script type="text/javascript">
+        let miChartAutores = null;
+
+        function alternarVistaTop10() {
+            const tabla = document.getElementById('vista-tabla-autores');
+            const grafico = document.getElementById('vista-grafico-autores');
+            if (tabla.style.display === "none") {
+                tabla.style.display = "block";
+                grafico.style.display = "none";
+            } else {
+                tabla.style.display = "none";
+                grafico.style.display = "block";
+            }
+        }
+
+        Dropzone.options.uploadDf = {
+            paramName: "file", 
+            maxFilesize: 20,
             acceptedFiles: ".csv, .xls, .xlsx",
-            dictDefaultMessage: "Arrastra tus archivos aquí o haz clic para subir",
-            init: function() {
-                this.on("success", function(file, response) {
-                    console.log("Archivo procesado:", response);
-                    alert("Datos cargados correctamente");
+            dictDefaultMessage: "Arrastra archivos aquí o haz clic para analizar",
+            init: function () {
+                this.on("success", function (file, response) {
+                    document.getElementById('resultados').style.display = 'block';
+
+                    // Nube de palabras
+                    if (response.wordcloud) {
+                        const img = document.getElementById('imagen-nube');
+                        img.src = "data:image/png;base64," + response.wordcloud;
+                        img.style.display = "block";
+                    }
+
+                    // Idiomas
+                    const divIdiomas = document.getElementById('contenedor-idiomas');
+                    divIdiomas.innerHTML = ""; 
+                    Object.entries(response.analisis_avanzado.idiomas).forEach(([idioma, cantidad]) => {
+                        divIdiomas.innerHTML += `<span style="background:#e3f2fd; color:#0d47a1; padding:5px 12px; border-radius:15px; font-size:0.8em; border:1px solid #bbdefb; font-weight:bold;">${idioma}: ${cantidad}</span>`;
+                    });
+
+                    // Top 10 Autores (Tabla)
+                    const autoresData = response.analisis_avanzado.top_10;
+                    const cuerpoAutores = document.getElementById('cuerpo-autores');
+                    cuerpoAutores.innerHTML = "";
+                    autoresData.forEach(a => {
+                        cuerpoAutores.innerHTML += `<tr><td style="padding:8px; border:1px solid #ddd;">${a.Author}</td><td style="padding:8px; border:1px solid #ddd; text-align:center;">${a.Count}</td></tr>`;
+                    });
+
+                    // Top 10 Autores (Gráfico)
+                    const ctx = document.getElementById('chartAutores').getContext('2d');
+                    if (miChartAutores) miChartAutores.destroy();
+                    miChartAutores = new Chart(ctx, {
+                        type: 'bar',
+                        data: {
+                            labels: autoresData.map(a => a.Author),
+                            datasets: [{
+                                label: 'Cantidad de Artículos',
+                                data: autoresData.map(a => a.Count),
+                                backgroundColor: '#007bff88',
+                                borderColor: '#007bff',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: { indexAxis: 'y', scales: { x: { beginAtZero: true } } }
+                    });
+
+                    // Crecimiento Anual
+                    const listaC = document.getElementById('lista-crecimiento');
+                    listaC.innerHTML = "";
+                    response.analisis_avanzado.tasa_crecimiento.forEach(item => {
+                        const color = item.crecimiento >= 0 ? "#28a745" : "#dc3545";
+                        listaC.innerHTML += `<li><strong>${item.anio}:</strong> <span style="color:${color}">${item.crecimiento > 0 ? '+':''}${item.crecimiento}%</span></li>`;
+                    });
+
+                    // Historial
+                    fetch('/historial')
+                        .then(res => res.json())
+                        .then(data => {
+                            const tablaH = document.getElementById('tabla-historial');
+                            tablaH.innerHTML = "";
+                            data.datos.forEach(reg => {
+                                tablaH.innerHTML += `<tr><td style="padding:8px; border:1px solid #ddd;">${reg.archivo}</td><td style="padding:8px; border:1px solid #ddd; text-align:center;">${reg.filtro_inicio} - ${reg.filtro_fin}</td><td style="padding:8px; border:1px solid #ddd;">${reg.fecha}</td></tr>`;
+                            });
+                        });
                 });
             }
         };
-</script>
+    </script>
+</body>
+</html>

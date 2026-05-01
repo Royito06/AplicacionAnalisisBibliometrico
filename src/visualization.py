@@ -1,0 +1,1 @@
+# Generación de gráficos (que Flask enviará al HTML)
