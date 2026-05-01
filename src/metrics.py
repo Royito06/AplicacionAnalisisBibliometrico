@@ -178,6 +178,13 @@ def tasa_crecimiento(df):
             "crecimiento": round(valor, 2) if pd.notnull(valor) else 0 
         })
     return resultado
+
+def distribucion_idiomas(df):
+    col_idioma = next((c for c in df.columns if 'lang' in c.lower() or 'idioma' in c.lower()), None)
+    if not col_idioma:
+        return {}
+    distribucion = df[col_idioma].value_counts().to_dict()
+    return distribucion
 #--------------------------------------------------------------------------------------------
 ##Exportación de Docs
 

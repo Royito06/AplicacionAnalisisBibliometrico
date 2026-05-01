@@ -107,7 +107,8 @@ def upload_file():
                 "productividad": src.metrics.calcular_promedio_publicaciones(df_limpio),
                 "top_10": src.metrics.obtener_top_10_autores(df_limpio),
                 "top_citas_anuales": src.metrics.obtener_top_citas_anuales(df_limpio),
-                "tasa_crecimiento": src.metrics.calcular_tasa_crecimiento(df_limpio)
+                "tasa_crecimiento": src.metrics.calcular_tasa_crecimiento(df_limpio),
+                "idiomas": src.metrics.distribucion_idiomas(df_limpio)
             }
             
             return jsonify(resumen), 200
