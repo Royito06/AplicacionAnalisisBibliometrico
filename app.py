@@ -1,7 +1,10 @@
 from flask import Flask, request, jsonify, render_template, send_file
 import pandas as pd
+import datetime
 import os
 import io
+from typing import Any, Dict
+from werkzeug.utils import secure_filename
 from src.data_loader import leer_archivo_datos
 from src.cleaner import limpiar_dataset
 from src.metrics import (
@@ -21,10 +24,48 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 ultimo_df_procesado = None
 
-# --- Funciones ---
+# --- Funciones ---    
+def es_autor_unico(valor):
+        partes = [p.strip() for p in valor.split(';') if p.strip()]
+        if len(partes) > 1:
+            return False   # los autores suelen separarse por ;
+        if len(partes) == 1:
+            return True    # 
+        # si no hay ; revisa por comas (formato Scopus)
+        return len([p for p in valor.split(',') if p.strip()]) <= 2
 
-# Por el momento solo genera un resumen, para sprints siguientes
-# se espera la bibliometría completa
+def formatear_apa(fila, col_revista, col_volumen, col_numero, col_paginas):
+    autores_sin_formato = str(fila.get('Authors', ''))
+    autores_lista = [ a.strip() for a in autores_sin_formato.split(';') if a.strip()]
+    if len(autores_lista) == 1:
+        autores_apa = autores_lista[0]
+    elif len(autores_lista)>1:
+        autores_apa = ', '.join(autores_lista[:-1])+ ', & ' + autores_lista[-1]
+    else:
+        autores_apa = 'Autor desconocido'
+        
+    anio     = str(fila.get('Year',         ''))
+    titulo   = str(fila.get('Title',        ''))
+    revista  = str(fila.get(col_revista,    '')) if col_revista else ''
+    volumen  = str(fila.get(col_volumen,    '')) if col_volumen else ''
+    numero   = str(fila.get(col_numero,     '')) if col_numero  else ''
+    paginas  = str(fila.get(col_paginas,    '')) if col_paginas else ''
+    
+        # Construir progresivamente — solo agrega lo que existe
+    ref = f"{autores_apa}. ({anio}). {titulo}."
+    if revista:
+        ref += f" {revista}"
+        if volumen:
+            ref += f", {volumen}"
+            if numero:
+                ref += f"({numero})"
+        if paginas:
+            ref += f", {paginas}"
+        ref += "."
+
+    return ref
+  
+
 def procesar_bibliometria(df, nombre_archivo):
     if df is None or df.empty:
         return {"error": "El dataframe está vacío o es inválido"}
@@ -74,35 +115,104 @@ def procesar_bibliometria(df, nombre_archivo):
     # ---------------- AUTORES ----------------
     autores_resumen = df['Authors'].dropna().head(20).tolist() if 'Authors' in df.columns else []
 
+    articulos_autor_unico = []
+    total_autor_unico = 0
+
+    if 'Authors' in df.columns and 'Title' in df.columns:
+
+
+        col_au = df['Authors'].fillna('').astype(str)  
+        autor_unico = col_au.apply(es_autor_unico)
+        autor_unico = autor_unico & (col_au != '')
+
+        df_unicos = df[autor_unico]
+        total_autor_unico = int(len(df_unicos))
+        articulos_autor_unico = (
+            df_unicos[['Title', 'Authors']]
+            .dropna(subset=['Title'])
+            .head(20)
+            .values.tolist()
+        )
+        
+    #minimo y maximo de autores
+    min_autores = 0
+    max_autores = 0
+    promedio_autores = 0
+    
+    if 'Authors' in df.columns:
+
+        def contar_autores(valor):
+            if pd.isna(valor) or str(valor).strip() == '':
+                return None
+            partes = [p.strip() for p in str(valor).split(';') if p.strip()]
+            return len(partes)
+
+        conteo = df['Authors'].apply(contar_autores).dropna()
+
+        min_autores      = int(conteo.min())
+        max_autores      = int(conteo.max())
+        promedio_autores = round(float(conteo.mean()), 2)
+
     # ---------------- TOPS ----------------
     col_revista = next((c for c in df.columns if 'source' in c.lower() or 'journal' in c.lower()), None)
     col_citas = next((c for c in df.columns if 'cite' in c.lower()), None)
     col_ciudad = next((c for c in df.columns if 'city' in c.lower()), None)
+    col_volumen = next((c for c in df.columns if c.lower() in ('volume', 'vol')), None)
+    col_numero  = next((c for c in df.columns if c.lower() in ('issue', 'number')), None)
+    col_paginas = next((c for c in df.columns if 'page' in c.lower()), None)
+    col_anio    = next((c for c in df.columns if 'year' in c.lower()), None)
 
     top_revistas = []
     if col_revista:
         top_revistas = df[col_revista].value_counts().head(10).reset_index().values.tolist()
 
-    # 🔥 FIX IMPORTANTE AQUÍ
+    
     top_citados = []
     if 'Title' in df.columns and col_citas:
         df[col_citas] = pd.to_numeric(df[col_citas], errors='coerce').fillna(0)
-        top_citados = df.sort_values(by=col_citas, ascending=False)\
-                        .head(10)[['Title', col_citas]].values.tolist()
+        top_df = df.sort_values(by=col_citas, ascending=False).head(10)
+        
+        top_citados = []
+        for _, fila in top_df.iterrows():
+            top_citados.append({
+                'titulo': str(fila['Title']),
+                'citas':  int(fila[col_citas]),
+                'apa':    formatear_apa(fila,col_revista,col_volumen,col_numero,col_paginas)
+            })
 
     # ---------------- Afiliaciones ----------------
     top_Afiliaciones = []
     top_Ciudades = []
+    top_universidades = []
 
     if col_afiliacion:
+        serieUniversidades = df[col_afiliacion].dropna().astype(str)
         top_Afiliaciones = df[col_afiliacion].astype(str)\
             .str.split(',').str[0]\
             .value_counts().head(10).reset_index().values.tolist()
-
-    #if col_ciudad:
-    #    top_Ciudades = df[col_ciudad].astype(str)\
-    #        .str.split(',').str[-1].str.strip()\
-    #        .value_counts().head(10).reset_index().values.tolist()
+        
+        serie_explotada = (
+            serieUniversidades
+            .str.split(';')       # parte cada celda en lista de afiliaciones
+            .explode()            # convierte cada elemento de la lista en su propia fila
+            .str.strip()          # quita espacios sobrantes
+            .loc[lambda s: s != '']  # descarta strings vacíos
+        )
+        universidades = (
+            serie_explotada
+            .str.split(',')
+            .str[0]             
+            .str.strip()
+        )
+        top_universidades = (
+            universidades
+            .value_counts()       # cuenta y ordena de mayor a menor automáticamente
+            .head(10)
+            .reset_index()
+            .values.tolist()
+        )
+        # El if puede parecer algo largo pero si no se hace de esta manera puede tronar si no hay columna de afiliación
+    
     if col_ciudad:
         top_Ciudades = (
             df[col_ciudad]
@@ -115,7 +225,26 @@ def procesar_bibliometria(df, nombre_archivo):
             .dropna()                          # elimina los None resultantes
             .value_counts().head(10).reset_index().values.tolist()
     )
+        
+        
+    # ---------------- Citas ----------------
+    promedio_citas_anual = None
+    #El promedio se calcula: citas totales/(año actual-año de publicación+1)
+    if col_citas and col_anio: 
+        anio_actual = datetime.datetime.now().year
+        
+        df_citas = df[[col_anio, col_citas].copy()]
+        df_citas[col_anio] = pd.to_numeric(df_citas[col_anio], errors= 'coerce')
+        df_citas[col_citas] = pd.to_numeric(df_citas[col_citas], errors='coerce')
+        df_citas = df_citas.dropna() 
+        
+        # Años transcurridos desde publicación 
+        df_citas['anios_activo'] = (anio_actual - df_citas[col_anio] + 1).clip(lower=1)
 
+        # Citas por año para cada artículo
+        df_citas['citas_por_anio'] = df_citas[col_citas] / df_citas['anios_activo']
+
+        promedio_citas_anual = round(float(df_citas['citas_por_anio'].mean()), 2)
     # ---------------- Resultado ----------------
     resumen = {
         "confirmación": {
@@ -125,7 +254,10 @@ def procesar_bibliometria(df, nombre_archivo):
         "metricas": {
             "total_articulos": total_importados,
             "articulos_validos": registros_con_titulo,
-            "afiliaciones_corregidas": conteo_vacios
+            "afiliaciones_corregidas": conteo_vacios,
+            "min_autores": min_autores,
+            "max_autores": max_autores,
+            "promedio_autores": promedio_autores
         },
         "resumen_contenido": {
             "libros": libros_resumen,
@@ -137,12 +269,19 @@ def procesar_bibliometria(df, nombre_archivo):
         },
         "Afiliaciones": {
             "ciudades": top_Ciudades,
-            "Afiliaciones": top_Afiliaciones
-        }
+            "Afiliaciones": top_Afiliaciones,
+            "Universidades": top_universidades
+        },
+        "autor_unico": {
+            "total":     total_autor_unico,
+            "articulos": articulos_autor_unico   
+        },
+        "promedio_citas_anual": promedio_citas_anual
     }
 
     return resumen
 
+  
 def filtrar_por_anio(df, inicio, fin):
     """
     Filtra el Dataframe por un rango de años
@@ -174,7 +313,7 @@ def index():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    #global ultimo_df_procesado
+    global ultimo_df_procesado
 
     if 'file' not in request.files:
         return jsonify({
@@ -190,29 +329,31 @@ def upload_file():
     }), 400
     try: 
         # Se guarda temporalmente
-        filepath = os.path.join(UPLOAD_FOLDER, file.filename)
+        nombre_seguro = secure_filename(file.filename or "archivo_sin_nombre") #El nombre seguro no es necesario pero se usa para evitar errores
+        filepath = os.path.join(UPLOAD_FOLDER, nombre_seguro)
         file.save(filepath)
 
         # Se leen los datos
         df = leer_archivo_datos(filepath)
         if df is not None:
             df = limpiar_dataset(df)
+            
             anio_inicio = request.form.get('anio_inicio', type = int)
             anio_fin = request.form.get('anio_fin', type = int)
             if anio_inicio and anio_fin:
                 df = filtrar_por_anio(df, anio_inicio, anio_fin)
             
             ultimo_df_procesado = df.copy()
-            rango = obtener_rango_anios(df)
-            promedio = calcular_promedio_publicaciones(df)
-            top_10 = obtener_top_10_autores(df)
+            #Esta línea es para evitar una error con el tipado
+
+
             total_sin_citas = identificar_no_citados(df)
-            resumen = procesar_bibliometria(df, file.filename)
+            resumen: Dict[str, Any] = procesar_bibliometria(df, file.filename or "archivo")
             resumen['metricas']['articulos_sin_citas'] = int(total_sin_citas)
             resumen['analisis_avanzado'] = {
-                "rango": rango,
-                "productividad": promedio,
-                "top_10": top_10
+                "rango": obtener_rango_anios(df),
+                "productividad": calcular_promedio_publicaciones(df),
+                "top_10": obtener_top_10_autores(df)
             }
             return jsonify(resumen), 200
         else:
