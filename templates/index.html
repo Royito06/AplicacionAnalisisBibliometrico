@@ -5,6 +5,47 @@
     <title>Carga de Datos</title>
     <script src="https://unpkg.com/dropzone@5/dist/min/dropzone.min.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/dropzone@5/dist/min/dropzone.min.css" type="text/css" />
+    <style>
+        /* Estilos básicos para la página */
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 900px; margin: auto; }
+        .container { margin-bottom: 30px; }
+        
+        /* Estilos para el sistema de pestañas */
+        .tabs-container {
+            display: flex;
+            border-bottom: 2px solid #ccc;
+            margin-bottom: 20px;
+            margin-top: 30px;
+        }
+        .tab-button {
+            background-color: #f1f1f1;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            padding: 14px 24px;
+            transition: 0.3s;
+            font-size: 16px;
+            border-radius: 8px 8px 0 0;
+            margin-right: 5px;
+        }
+        .tab-button:hover {
+            background-color: #ddd;
+        }
+        .tab-button.active {
+            background-color: #007BFF;
+            color: white;
+            font-weight: bold;
+        }
+        .tab-content {
+            display: none;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            background-color: #fafafa;
+        }
+        ul { line-height: 1.8; font-size: 16px; }
+    </style>
 </head>
 <body>
 
@@ -13,7 +54,47 @@
         <form action="/upload" class="dropzone" id="upload-df"></form>
     </div> 
 
+    <!-- BLOQUE DE RESULTADOS (Oculto hasta que se suba el archivo) -->
+    <div id="panel-resultados" style="display: none;"> 
+        
+        <h2>Resultados del Análisis</h2>
+
+        <!-- Botones de las Pestañas -->
+        <div class="tabs-container">
+            <button class="tab-button active" onclick="abrirCategoria(event, 'categoriaA')">📊 Categoría A: Publicación</button>
+            <button class="tab-button" onclick="abrirCategoria(event, 'categoriaB')">📈 Categoría B: Citas</button>
+        </div>
+
+        <!-- CAJA DE CATEGORÍA A -->
+        <div id="categoriaA" class="tab-content" style="display: block;">
+            <h3>Métricas de Publicación</h3>
+            <ul>
+                <li>Rango de años activos: <b><span id="res_nay"></span></b></li>
+                <li>Promedio de publicaciones por autor: <b><span id="res_prom_autores"></span></b></li>
+                <li>Coautorías: <b><span id="res_coautorias"></span></b></li>
+                <br>
+                <!-- Enlaces a las vistas dedicadas -->
+                <li><a href="/paises" target="_blank">Ver lista completa de Países</a></li>
+                <li><a href="/proyectos" target="_blank">Ver Gestor de Proyectos (Sesiones)</a></li>
+            </ul>
+        </div>
+
+        <!-- CAJA DE CATEGORÍA B -->
+        <div id="categoriaB" class="tab-content" style="display: none;">
+            <h3>Métricas de Citas</h3>
+            <ul>
+                <li>Promedio de Citas por Artículo: <b><span id="res_prom_citas"></span></b></li>
+                <li>Proporción de Publicaciones Citadas (PCP): <b><span id="res_pcp"></span></b></li>
+                <br>
+                <!-- Enlace a la vista dedicada -->
+                <li><a href="/top-trabajos" target="_blank">Ver Top 10 Trabajos Más Citados</a></li>
+            </ul>
+        </div>
+
+    </div>
+
     <script>
+        // Configuración de Dropzone
         Dropzone.options.uploadDf = {
             paramName: "file", // El nombre que recibirá el backend
             maxFilesize: 5,    // Esto es en megabytes
@@ -22,10 +103,42 @@
             init: function() {
                 this.on("success", function(file, response) {
                     console.log("Archivo procesado:", response);
-                    alert("Datos cargados correctamente");
+                    
+                    // Mostramos el panel oculto haciendo que su display sea block
+                    document.getElementById('panel-resultados').style.display = 'block';
+
+                    // Inyectamos los datos en la Categoría A extraídos del json (response)
+                    if(response.rango_anios) document.getElementById('res_nay').innerText = response.rango_anios.mensaje_formateado;
+                    if(response.promedio_autores) document.getElementById('res_prom_autores').innerText = response.promedio_autores.mensaje_formateado;
+                    if(response.coautorias) document.getElementById('res_coautorias').innerText = response.coautorias.mensaje_formateado;
+
+                    // Inyectamos los datos en la Categoría B extraídos deljson (response)
+                    if(response.impacto_citas) document.getElementById('res_prom_citas').innerText = response.impacto_citas.mensaje_formateado;
+                    if(response.proporcion_citadas) document.getElementById('res_pcp').innerText = response.proporcion_citadas.mensaje_formateado;
+
+                    alert("Datos calculados y listos para visualizar");
                 });
             }
         };
+
+        // Función para alternar entre las pestañas
+        function abrirCategoria(evento, idCategoria) {
+            // Ocultamos todas las cajas de contenido
+            let contenidos = document.getElementsByClassName("tab-content");
+            for (let i = 0; i < contenidos.length; i++) {
+                contenidos[i].style.display = "none";
+            }
+
+            // Quitamos el color azul (clase active) de todos los botones
+            let botones = document.getElementsByClassName("tab-button");
+            for (let i = 0; i < botones.length; i++) {
+                botones[i].className = botones[i].className.replace(" active", "");
+            }
+
+            // Mostramos la caja seleccionada y resaltamos el botón presionado
+            document.getElementById(idCategoria).style.display = "block";
+            evento.currentTarget.className += " active";
+        }
     </script>
 
 </body>
