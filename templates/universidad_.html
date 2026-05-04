@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Investigaciones por Universidad</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #e2f0d9; } /* Un tono verde para distinguirla de la otra tabla */
+        .badge { background: #333; color: white; padding: 5px 10px; border-radius: 15px; }
+    </style>
+</head>
+<body>
+
+    <h2>Artículos publicados por: <span style="color: blue;">{{ nombre_buscado }}</span></h2>
+    <p>Total encontrados: <span class="badge">{{ articulos|length }}</span></p>
+    
+    <a href="/">Volver al inicio</a>
+
+    {% if articulos %}
+        <table>
+            <thead>
+                <tr>
+                    <th>N°</th>
+                    <th>Título de la Investigación</th>
+                    <th>Afiliación Exacta Registrada</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for articulo in articulos %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td>{{ articulo.titulo }}</td>
+                    <td>{{ articulo.afiliacion }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p style="color: red; margin-top: 20px;">No se encontraron artículos para esta universidad en el dataset actual.</p>
+    {% endif %}
+
+</body>
+</html>
