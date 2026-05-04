@@ -97,7 +97,7 @@ def obtener_top_10_autores(df):
             break
             
     if col_autor is None:
-        return {"error": "No se encontró la columna de Autores."}
+        return []
         
     df_limpio = df.dropna(subset=[col_autor])
     
@@ -127,19 +127,15 @@ def obtener_top_10_trabajos(df):
     """
     Ordena los trabajos por número de citas y da el top 10
     """
-    # Buscamos citas y títulos
-    posibles_citas = ['Citas', 'TC', 'Times Cited', 'Citations']
-    posibles_titulos = ['Título', 'Title', 'TI', 'Article Title']
     
     col_citas = None
     col_titulo = None
     
-    for col in df.columns:
-        if col in posibles_citas:
-            col_citas = col
-        if col in posibles_titulos:
-            col_titulo = col
-            
+    # Buscamos citas y títulos
+    col_citas  = next((c for c in df.columns if 'cite' in c.lower() or 'cita' in c.lower()), None)
+    col_titulo = next((c for c in df.columns if 'titl' in c.lower()), None)
+    
+
     if not col_citas or not col_titulo:
         return [] #Vacío si el archivo no tiene estas columnas
         
@@ -276,13 +272,10 @@ def obtener_lista_paises(df):
     """
     Extrae, limpia y cuenta todos los países únicos que participan en los papers
     """
-    posibles_nombres = ['País', 'Países', 'Country', 'Countries', 'CU']
     col_pais = None
+    col_pais = next((c for c in df.columns if 'countr' in c.lower() or 'país' in c.lower()), None)
     
-    for col in df.columns:
-        if col in posibles_nombres:
-            col_pais = col
-            break
+
             
     if col_pais is None:
         return [] # retornamos si no hay nada

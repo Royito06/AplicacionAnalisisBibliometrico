@@ -78,16 +78,20 @@ def formatear_apa(fila, col_revista, col_volumen, col_numero, col_paginas):
 def generar_wordcloud(df):
     if 'Title' not in df.columns or df['Title'].empty:
         return None
-    texto = " ".join(titulo for titulo in df['Title'].astype(str))
-    wc = WordCloud(width=800, height=400, background_color='white').generate(texto)
-    img = io.BytesIO()
-    plt.figure(figsize=(10, 5))
-    plt.imshow(wc, interpolation='bilinear')
-    plt.axis('off')
-    plt.savefig(img, format='png', bbox_inches='tight')
-    plt.close()
-    img.seek(0)
-    return base64.b64encode(img.getvalue()).decode()
+    try: 
+        texto = " ".join(titulo for titulo in df['Title'].astype(str))
+        wc = WordCloud(width=800, height=400, background_color='white').generate(texto)
+        img = io.BytesIO()
+        plt.figure(figsize=(10, 5))
+        plt.imshow(wc, interpolation='bilinear')
+        plt.axis('off')
+        plt.savefig(img, format='png', bbox_inches='tight')
+        plt.close()
+        img.seek(0)
+        return base64.b64encode(img.getvalue()).decode()
+    except Exception as e:
+        print(f"Error generando wordcloud: {e}")
+        return None   # ← no propagar el error
 
 def procesar_bibliometria(df, nombre_archivo):
     if df is None or df.empty:
@@ -384,7 +388,10 @@ def upload_file():
         "top_10": src.metrics.obtener_top_10_autores(df),
         "top_citas_anuales": src.metrics.obtener_top_citas_anuales(df),
         "tasa_crecimiento": src.metrics.calcular_tasa_crecimiento(df),
-        "idiomas": src.metrics.distribucion_idiomas(df)
+        "idiomas": src.metrics.distribucion_idiomas(df),
+        "coautorias":         src.metrics.contabilizar_coautorias(df),
+        "impacto_citas":      src.metrics.calcular_promedio_citas(df),
+        "proporcion_citadas": src.metrics.calcular_proporcion_citadas(df)
         }
             
         
@@ -521,6 +528,7 @@ def descargar_word():
         buffer = src.metrics.word_descargar(ultimo_df_procesado, titulo="Reporte Bibliométrico")
         return send_file(buffer, mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document', as_attachment=True, download_name='reporte.docx')
     return jsonify({"error": "Sin datos"}), 400
+
 """
         return jsonify({"error": "Nombre vacío"}), 400
 
@@ -574,7 +582,7 @@ def top_trabajos():
     proyecto_actual = session.get('proyecto_actual')
     
     if not proyecto_actual:
-        return "Primero debes subir un archivo o seleccionar un proyecto existente."
+        return redirect('/proyectos')
         
     ruta_archivo = os.path.join(UPLOAD_FOLDER, proyecto_actual)
     df = src.data_loader.leer_archivo_datos(ruta_archivo)
@@ -592,14 +600,14 @@ def articulos_universidad(nombre_universidad):
     proyecto_actual = session.get('proyecto_actual')
     
     if not proyecto_actual:
-        return "Primero debes subir un archivo o seleccionar un proyecto existente."
+        return redirect('/proyectos')
         
     ruta_archivo = os.path.join(UPLOAD_FOLDER, proyecto_actual)
     df = src.data_loader.leer_archivo_datos(ruta_archivo)
     
     if df is not None:
         articulos_encontrados = src.metrics.obtener_articulos_por_universidad(df, nombre_universidad)
-        return render_template('universidad.html', 
+        return render_template('universidad_.html', 
                                nombre_buscado=nombre_universidad, 
                                articulos=articulos_encontrados)
     else:
@@ -612,8 +620,8 @@ def lista_paises():
     proyecto_actual = session.get('proyecto_actual')
     
     if not proyecto_actual:
-        return "Primero debes subir un archivo o seleccionar un proyecto existente."
-        
+        return redirect('/proyectos')
+    
     ruta_archivo = os.path.join(UPLOAD_FOLDER, proyecto_actual)
     df = src.data_loader.leer_archivo_datos(ruta_archivo)
     
@@ -630,8 +638,8 @@ def detalle_articulo(titulo):
     proyecto_actual = session.get('proyecto_actual')
     
     if not proyecto_actual:
-        return "Primero debes subir un archivo o seleccionar un proyecto existente."
-        
+        return redirect('/proyectos')
+    
     ruta_archivo = os.path.join(UPLOAD_FOLDER, proyecto_actual)
     df = src.data_loader.leer_archivo_datos(ruta_archivo)
     
@@ -663,7 +671,7 @@ def exportar_csv(metrica):
     # Verificamos que haya un proyecto activo
     proyecto_actual = session.get('proyecto_actual')
     if not proyecto_actual:
-        return "Primero debes subir un archivo.", 400
+        return redirect('/proyectos')
         
     ruta_archivo = os.path.join(UPLOAD_FOLDER, proyecto_actual)
     df = src.data_loader.leer_archivo_datos(ruta_archivo)
@@ -702,12 +710,4 @@ def exportar_csv(metrica):
 if __name__ == '__main__':
     # Arrancamos el servidor.
     app.run(debug=True)
-    """
-    Esto es para prueba
     
-ruta= "simon&pumba.csv"
-dataframe = leer_archivo_datos(ruta)
-resultado_final = procesar_bibliometria(dataframe, os.path.basename(ruta))
-
-print(resultado_final)
-    """
