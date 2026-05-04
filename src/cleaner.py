@@ -26,7 +26,7 @@ def limpiar_dataset(df):
     """
     Recorre el DataFrame y normaliza la columna de autores 
     para que los cálculos sean exactos.
-    """
+    
     df = df.copy()
     posibles_nombres = ['Autor', 'Autores', 'Author', 'Authors', 'AU']
     col_autor = next((c for c in df.columns if c in posibles_nombres), None)
@@ -34,5 +34,5 @@ def limpiar_dataset(df):
     if col_autor:
         df[col_autor] = df[col_autor].astype(str).apply(normalizar_nombre)
         print(f"Columna '{col_autor}' normalizada con éxito.")
-    
+    """
     return df

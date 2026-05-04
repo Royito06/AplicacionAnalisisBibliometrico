@@ -13,7 +13,9 @@ from src.metrics import (
     obtener_top_10_autores,
     obtener_articulo_sin_citas,
     excel_descargar,
-    word_descargar
+    word_descargar,
+    calcular_h_index,       
+    distribucion_documentos
 )
 
 
@@ -71,6 +73,8 @@ def procesar_bibliometria(df, nombre_archivo):
         return {"error": "El dataframe está vacío o es inválido"}
 
     #  Normalizar columnas (clave)
+    df = df.copy()
+    
     df.columns = df.columns.str.strip()
 
     print("Columnas detectadas:", df.columns.tolist())
@@ -233,7 +237,7 @@ def procesar_bibliometria(df, nombre_archivo):
     if col_citas and col_anio: 
         anio_actual = datetime.datetime.now().year
         
-        df_citas = df[[col_anio, col_citas].copy()]
+        df_citas = df[[col_anio, col_citas]].copy()
         df_citas[col_anio] = pd.to_numeric(df_citas[col_anio], errors= 'coerce')
         df_citas[col_citas] = pd.to_numeric(df_citas[col_citas], errors='coerce')
         df_citas = df_citas.dropna() 
@@ -295,15 +299,17 @@ def filtrar_por_anio(df, inicio, fin):
         return df[(df[col_anio] >=inicio) & (df[col_anio] <= fin)]
     return df
 
-def identificar_no_citados(df):
-    """
-    Cuenta cuántos artículos tienen 0 citas en WoS
-    """
-    col_citas = next((c for c in df.columns if 'times cited, wos' in c.lower()), None)
-    if col_citas:
-        conteo_sin_citas = (pd.to_numeric(df[col_citas], errors = 'coerce').fillna(0) == 0).sum()
-        return int(conteo_sin_citas)
-    return 0
+
+
+
+def actualizar_dataset(df_existente, df_nuevo):
+    try:
+        df_combinado  = pd.concat([df_existente, df_nuevo], ignore_index=True)
+        df_actualizado = df_combinado.drop_duplicates(subset=['Title'], keep='last')  
+        return df_actualizado
+    except Exception as e:
+        print(f"Error al actualizar: {e}")
+        return df_existente
 
 # --- RUTAS DE FLASK ---
 
@@ -347,7 +353,7 @@ def upload_file():
             #Esta línea es para evitar una error con el tipado
 
 
-            total_sin_citas = identificar_no_citados(df)
+            total_sin_citas = obtener_articulo_sin_citas(df)
             resumen: Dict[str, Any] = procesar_bibliometria(df, file.filename or "archivo")
             resumen['metricas']['articulos_sin_citas'] = int(total_sin_citas)
             resumen['analisis_avanzado'] = {
@@ -389,6 +395,101 @@ def upload_file():
             "message": "Error crítico en el servidor.",
             "details": str(e)
         }), 500
+
+@app.route('/buscar', methods=['POST'])
+def buscar_datos():
+    global ultimo_df_procesado                          # ← usa esto, no "df"
+
+    if ultimo_df_procesado is None:
+        return jsonify({"status": "error", "message": "No hay datos cargados"}), 400
+
+    filtros = request.json
+    if not filtros:
+        return jsonify({"status": "error", "message": "No se recibieron filtros"}), 400
+
+    try:
+        df_filtrado = ultimo_df_procesado.copy()        # ← era df.copy(), incorrecto
+        for columna, valor in filtros.items():
+            if valor and columna in df_filtrado.columns:
+                df_filtrado = df_filtrado[
+                    df_filtrado[columna].astype(str).str.contains(str(valor), case=False)
+                ]
+        return jsonify({
+            "status": "success",
+            "resultados_encontrados": len(df_filtrado),
+            "datos": df_filtrado.to_dict(orient='records')  # ← era df_[filtrado.to_dict], typo
+        }), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/analisis/conectores', methods=['GET'])
+def identificar_conectores():
+    global ultimo_df_procesado                          # ← usa esto, no "df"
+
+    if ultimo_df_procesado is None:
+        return jsonify({"status": "error", "message": "No hay datos cargados"}), 400
+
+    try:
+        df = ultimo_df_procesado.copy()
+        col_autor = next(
+            (c for c in df.columns if c.lower() in ('authors', 'author', 'au')), None
+        )
+        if col_autor is None:
+            return jsonify({"status": "error", "message": "No se encontró columna de autores"}), 400
+
+        # Explotar autores en filas individuales
+        autores_explotados = (
+            df[col_autor].dropna().astype(str)
+            .str.split(';')
+            .explode()
+            .str.strip()
+        )
+        conectores = autores_explotados.value_counts().head(10).to_dict()  # ← lógica corregida
+
+        return jsonify({
+            "status": "success",
+            "descripcion": "Autores con mayor número de publicaciones",
+            "data": conectores
+        }), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/analisis/anomalias', methods=['GET'])
+def detectar_anomalias():
+    global ultimo_df_procesado                         
+
+    if ultimo_df_procesado is None:
+        return jsonify({"status": "error", "message": "No hay datos cargados"}), 400
+
+    try:
+        df = ultimo_df_procesado.copy()
+        col_citas = next((c for c in df.columns if 'cite' in c.lower()), None)  # ← detecta la columna dinámicamente
+
+        if col_citas is None:
+            return jsonify({"status": "error", "message": "No se encontró columna de citas"}), 400
+
+        data_puntos = pd.to_numeric(df[col_citas], errors='coerce').dropna()
+        Q1  = data_puntos.quantile(0.25)
+        Q3  = data_puntos.quantile(0.75)
+        IQR = Q3 - Q1
+        limite_superior = Q3 + 1.5 * IQR
+
+        exitos = df[pd.to_numeric(df[col_citas], errors='coerce') > limite_superior]
+
+        col_titulo = 'Title'   if 'Title'   in df.columns else None
+        col_autor  = 'Authors' if 'Authors' in df.columns else None
+
+        cols = [c for c in [col_titulo, col_autor, col_citas] if c]  # solo columnas que existen
+        return jsonify({
+            "status": "success",
+            "total_anomalias_detectadas": len(exitos),
+            "limite_calculado": limite_superior,
+            "casos_extraordinarios": exitos[cols].to_dict(orient='records')
+        }), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 
 # Descargas de archivos(Excel y Word)
 @app.route('/download/excel')

@@ -1,8 +1,10 @@
 # Cálculos (Top 10, tasas de crecimiento)
 
 import pandas as pd
+import datetime
 import io 
 from docx import Document
+import networkx as nx     
 
 #--------------------------------------------------------------------------------------------
 
@@ -128,21 +130,16 @@ def obtener_top_10_autores(df):
     
     return resultado
 
+
 #--------------------------------------------------------------------------------------------
 
 def obtener_articulo_sin_citas(df):
-    """
-    Identifica artículos con 0 citas en Web Of Science
-    """
-    col_citas = 'Times Cited, WoS Core'
-
-    if col_citas in df.columns:
-        df[col_citas] = pd.to_numeric(df[col_citas], errors = 'coerce').fillna(0)
-
-        sin_citas = df[df[col_citas] == 0]
-
-        return sin_citas[['Title', 'Authors', 'Publication Year']]
-    return None
+ 
+    col_citas = next((c for c in df.columns if 'cite' in c.lower()), None)
+    if col_citas:
+        serie = pd.to_numeric(df[col_citas], errors='coerce')
+        return int((serie == 0).sum())   # NaN no cuenta como 0
+    return 0
 
 #--------------------------------------------------------------------------------------------
 ##Exportación de Docs
@@ -180,3 +177,71 @@ def word_descargar(df, titulo = "Reporte de Análisis"):
     doc.save(output)
     output.seek(0)
     return output
+#--------------------------------------------------------------------------------------------
+def distribucion_documentos(df):
+    col_tipo = next(
+        (c for c in df.columns if 'document type' in c.lower() or 'type' in c.lower()),
+        None
+    )                                                   
+    if col_tipo:
+        return df[col_tipo].value_counts().to_dict()
+    return {"error": "Columna no encontrada"}
+
+def calcular_h_index(df):
+    col_citas = next((c for c in df.columns if 'cite' in c.lower()), None)  
+    if col_citas is None:
+        return 0
+    citas = df[col_citas].fillna(0).astype(int).sort_values(ascending=False).tolist()
+    h = 0
+    for i, n_citas in enumerate(citas):
+        if n_citas >= i + 1:
+            h = i + 1
+        else:
+            break
+    return h
+
+def identificar_tendencias(df):
+    try:
+        col_citas = next((c for c in df.columns if 'cite' in c.lower()), None)   
+        col_anio  = next((c for c in df.columns if 'year' in c.lower()), None)   
+
+        if col_citas is None or col_anio is None:
+            return []
+
+        df = df.copy()
+        anio_actual = datetime.datetime.now().year                              
+
+        df['Edad'] = (anio_actual - pd.to_numeric(df[col_anio], errors='coerce')).clip(lower=1)
+        df['Crecimiento'] = pd.to_numeric(df[col_citas], errors='coerce').fillna(0) / df['Edad']
+
+        cols = [c for c in ['Title', 'Authors', 'Crecimiento'] if c in df.columns]
+        top = df.sort_values(by='Crecimiento', ascending=False).head(5)
+        return top[cols].to_dict(orient='records')
+    except Exception as e:
+        return {"error": str(e)}
+    
+                              
+
+def generar_grafo_palabras(df):
+    col_kw = next(
+        (c for c in df.columns if 'keyword' in c.lower()),
+        None
+    )                                                   #  detecta dinámicamente 
+    if col_kw is None:
+        return {"nodes": [], "edges": []}
+
+    G = nx.Graph()
+    keywords_list = df[col_kw].dropna().str.split(';')
+
+    for tags in keywords_list:
+        tags = [t.strip().lower() for t in tags if t.strip()]
+        for i in range(len(tags)):
+            for j in range(i + 1, len(tags)):
+                if G.has_edge(tags[i], tags[j]):
+                    G[tags[i]][tags[j]]['weight'] += 1
+                else:
+                    G.add_edge(tags[i], tags[j], weight=1)
+
+    nodes = [{"id": node, "size": G.degree(node)} for node in G.nodes()]      
+    edges = [{"source": u, "target": v, "value": d['weight']} for u, v, d in G.edges(data=True)]
+    return {"nodes": nodes, "edges": edges}
