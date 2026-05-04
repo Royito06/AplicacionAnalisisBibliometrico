@@ -1,38 +1,32 @@
-# Normalización de autores
 import re
 import unicodedata
 import pandas as pd
 
-def normalizar_nombre(texto):
-    """Lógica para limpiar un solo nombre de autor."""
-    if not texto or not isinstance(texto, str):
+def normalizar_autor(texto):
+    """Limpia y estandariza nombres de autores."""
+    if not texto or not isinstance(texto, str): 
         return ""
-    
     nombre = unicodedata.normalize('NFKD', texto)
     nombre = "".join([c for c in nombre if not unicodedata.combining(c)])
-    
     nombre = nombre.lower()
-    nombre = re.sub(r'[^a-z\s,]', '', nombre)
-
-    if ',' in nombre:
+    nombre = re.sub(r'[^a-z\s,;]', '', nombre)
+    
+    if ',' in nombre and ';' not in nombre:
         partes = nombre.split(',')
         if len(partes) >= 2:
             nombre = f"{partes[1].strip()} {partes[0].strip()}"
     
-    nombre = " ".join(nombre.split())
-    return nombre.title()
+    return " ".join(nombre.split()).title()
 
 def limpiar_dataset(df):
-    """
-    Recorre el DataFrame y normaliza la columna de autores 
-    para que los cálculos sean exactos.
-    
+    """Aplica la limpieza a la columna de autores detectada."""
     df = df.copy()
-    posibles_nombres = ['Autor', 'Autores', 'Author', 'Authors', 'AU']
-    col_autor = next((c for c in df.columns if c in posibles_nombres), None)
+    posibles = ['autor', 'autores', 'author', 'authors', 'au']
+    col_autor = next((c for c in df.columns if any(p in c.lower() for p in posibles)), None)
     
     if col_autor:
-        df[col_autor] = df[col_autor].astype(str).apply(normalizar_nombre)
-        print(f"Columna '{col_autor}' normalizada con éxito.")
-    """
+        df[col_autor] = df[col_autor].apply(
+            lambda x: "; ".join([normalizar_autor(a) for a in str(x).split(';') if a.strip()]) 
+            if pd.notna(x) else ""
+        )
     return df

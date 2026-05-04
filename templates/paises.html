@@ -2,45 +2,43 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Lista Completa de Países</title>
+    <title>Distribución por Países</title>
     <style>
-        body { font-family: Arial, sans-serif; padding: 20px; }
-        table { border-collapse: collapse; width: 60%; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #d9e2f0; } /* Un tono azul para diferenciarla */
-        .badge { background: #333; color: white; padding: 5px 10px; border-radius: 15px; font-weight: bold; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f4f7f6; padding: 40px; color: #2c3e50; }
+        .container { max-width: 800px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h1 { border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th { background: #3498db; color: white; padding: 12px; text-align: left; }
+        td { padding: 12px; border-bottom: 1px solid #ddd; }
+        tr:hover { background: #f9f9f9; }
+        .back-btn { display: inline-block; margin-bottom: 20px; color: #3498db; text-decoration: none; font-weight: bold; }
     </style>
 </head>
 <body>
-
-    <h2>Participación Geográfica Global</h2>
-    <a href="/exportar/paises" style="display: inline-block; margin-bottom: 15px; padding: 10px; background-color: #28a745; color: white; text-decoration: none; border-radius: 5px;">📥 Descargar esta tabla (CSV)</a>
-    <p>Total de países involucrados: <span class="badge">{{ paises|length }}</span></p>
-    
-    <a href="/">Volver al inicio</a>
-
-    {% if paises %}
+    <div class="container">
+        <a href="/" class="back-btn">← Volver al Dashboard</a>
+        <h1>Producción Científica por País</h1>
+        
+        {% if paises %}
         <table>
             <thead>
                 <tr>
-                    <th>Posición</th>
-                    <th>País Registrado</th>
+                    <th>País / Región</th>
                     <th>Cantidad de Publicaciones</th>
                 </tr>
             </thead>
             <tbody>
-                {% for item in paises %}
+                {% for p in paises %}
                 <tr>
-                    <td># {{ loop.index }}</td>
-                    <td>{{ item.pais }}</td>
-                    <td>{{ item.cantidad }}</td>
+                    <td>{{ p.pais }}</td>
+                    <td>{{ p.cantidad }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
-    {% else %}
-        <p style="color: red; margin-top: 20px;">No se encontraron datos de países en el archivo actual.</p>
-    {% endif %}
-
+        {% else %}
+        <p>No se encontraron datos de afiliación. Asegúrese de haber subido un archivo válido.</p>
+        {% endif %}
+    </div>
 </body>
 </html>

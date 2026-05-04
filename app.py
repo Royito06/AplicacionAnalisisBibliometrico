@@ -1,713 +1,113 @@
-from flask import Flask, request, jsonify, render_template, send_file, Response, session, redirect
-import pandas as pd
-import datetime
 import os
 import io
-from typing import Any, Dict
-from werkzeug.utils import secure_filename
-
-# Importamos las funciones desde los módulos que creamos.
-
-import src.metrics 
-import src.data_loader
-import src.cleaner 
-import base64
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-from wordcloud import WordCloud
-
+import pandas as pd
+from flask import Flask, request, jsonify, render_template, send_file
+from docx import Document
+from docx.shared import Pt
+import src.metrics
+import src.cleaner
 
 app = Flask(__name__)
-
-# Para que Flask pueda recordar datos del usuario (Sesiones)
-app.secret_key = 'super_clave_secreta_bibliometrica' 
-
-# Definimos la carpeta donde guardaremos los CSV temporales
-UPLOAD_FOLDER = 'uploads'
-
-# Esto le dice al sistema operativo: "Crea la carpeta 'uploads'". 
-# exist_ok=True evita que el programa crashee si la carpeta ya existe.
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
-ultimo_df_procesado = None
-historial_busquedas = []
-
-# --- Funciones ---    
-def es_autor_unico(valor):
-        partes = [p.strip() for p in valor.split(';') if p.strip()]
-        if len(partes) > 1:
-            return False   # los autores suelen separarse por ;
-        if len(partes) == 1:
-            return True    # 
-        # si no hay ; revisa por comas (formato Scopus)
-        return len([p for p in valor.split(',') if p.strip()]) <= 2
-
-def formatear_apa(fila, col_revista, col_volumen, col_numero, col_paginas):
-    autores_sin_formato = str(fila.get('Authors', ''))
-    autores_lista = [ a.strip() for a in autores_sin_formato.split(';') if a.strip()]
-    if len(autores_lista) == 1:
-        autores_apa = autores_lista[0]
-    elif len(autores_lista)>1:
-        autores_apa = ', '.join(autores_lista[:-1])+ ', & ' + autores_lista[-1]
-    else:
-        autores_apa = 'Autor desconocido'
-        
-    anio     = str(fila.get('Year',         ''))
-    titulo   = str(fila.get('Title',        ''))
-    revista  = str(fila.get(col_revista,    '')) if col_revista else ''
-    volumen  = str(fila.get(col_volumen,    '')) if col_volumen else ''
-    numero   = str(fila.get(col_numero,     '')) if col_numero  else ''
-    paginas  = str(fila.get(col_paginas,    '')) if col_paginas else ''
-    
-    # Construir progresivamente — solo agrega lo que existe
-    ref = f"{autores_apa}. ({anio}). {titulo}."
-    if revista:
-        ref += f" {revista}"
-        if volumen:
-            ref += f", {volumen}"
-            if numero:
-                ref += f"({numero})"
-        if paginas:
-            ref += f", {paginas}"
-        ref += "."
-
-    return ref
-  
-
-def generar_wordcloud(df):
-    if 'Title' not in df.columns or df['Title'].empty:
-        return None
-    texto = " ".join(titulo for titulo in df['Title'].astype(str))
-    wc = WordCloud(width=800, height=400, background_color='white').generate(texto)
-    img = io.BytesIO()
-    plt.figure(figsize=(10, 5))
-    plt.imshow(wc, interpolation='bilinear')
-    plt.axis('off')
-    plt.savefig(img, format='png', bbox_inches='tight')
-    plt.close()
-    img.seek(0)
-    return base64.b64encode(img.getvalue()).decode()
-
-def procesar_bibliometria(df, nombre_archivo):
-    if df is None or df.empty:
-        return {"error": "El dataframe está vacío o es inválido"}
-
-    #  Normalizar columnas (clave)
-    df = df.copy()
-    
-    df.columns = df.columns.str.strip()
-
-    print("Columnas detectadas:", df.columns.tolist())
-
-    #  Mapear nombres comunes (WoS/Scopus/etc)
-    mapa_columnas = {
-        'ti': 'Title',
-        'article title': 'Title',
-        'article titles': 'Title',
-        'au': 'Authors',
-        'authors': 'Authors',
-        'py': 'Year'
-    }
-
-    for col in df.columns:
-        key = col.lower().strip()
-        if key in mapa_columnas:
-            df.rename(columns={col: mapa_columnas[key]}, inplace=True)
-
-    # ---------------- Afiliaciones ----------------
-    col_afiliacion = next((c for c in df.columns if 'affilia' in c.lower() or 'institu' in c.lower()), None)
-    conteo_vacios = 0
-    if col_afiliacion:
-        conteo_vacios = int(df[col_afiliacion].isna().sum())
-        df[col_afiliacion] = df[col_afiliacion].fillna('Afiliación Desconocida')
-    
-    total_importados = int(df.shape[0])
-    col_titulo = next((c for c in df.columns if 'titl' in c.lower()), None)
-    if col_titulo:
-        df.rename(columns={col_titulo: 'Title'}, inplace=True)
-    
-    registros_con_titulo = int(df['Title'].dropna().count()) if 'Title' in df.columns else 0
-    libros_resumen = df['Title'].dropna().head(20).tolist() if 'Title' in df.columns else []
-
-    print("Ejemplo títulos:", libros_resumen[:3])
-
-    # ---------------- AUTORES ----------------
-    autores_resumen = df['Authors'].dropna().head(20).tolist() if 'Authors' in df.columns else []
-
-    articulos_autor_unico = []
-    total_autor_unico = 0
-
-    if 'Authors' in df.columns and 'Title' in df.columns:
-
-
-        col_au = df['Authors'].fillna('').astype(str)  
-        autor_unico = col_au.apply(es_autor_unico)
-        autor_unico = autor_unico & (col_au != '')
-
-        df_unicos = df[autor_unico]
-        total_autor_unico = int(len(df_unicos))
-        articulos_autor_unico = (
-            df_unicos[['Title', 'Authors']]
-            .dropna(subset=['Title'])
-            .head(20)
-            .values.tolist()
-        )
-        
-    #minimo y maximo de autores
-    min_autores = 0
-    max_autores = 0
-    promedio_autores = 0
-    
-    if 'Authors' in df.columns:
-
-        def contar_autores(valor):
-            if pd.isna(valor) or str(valor).strip() == '':
-                return None
-            partes = [p.strip() for p in str(valor).split(';') if p.strip()]
-            return len(partes)
-
-        conteo = df['Authors'].apply(contar_autores).dropna()
-
-        min_autores      = int(conteo.min())
-        max_autores      = int(conteo.max())
-        promedio_autores = round(float(conteo.mean()), 2)
-
-    # ---------------- TOPS ----------------
-    col_revista = next((c for c in df.columns if 'source' in c.lower() or 'journal' in c.lower()), None)
-    col_citas = next((c for c in df.columns if 'cite' in c.lower()), None)
-    col_ciudad = next((c for c in df.columns if 'city' in c.lower()), None)
-    col_volumen = next((c for c in df.columns if c.lower() in ('volume', 'vol')), None)
-    col_numero  = next((c for c in df.columns if c.lower() in ('issue', 'number')), None)
-    col_paginas = next((c for c in df.columns if 'page' in c.lower()), None)
-    col_anio    = next((c for c in df.columns if 'year' in c.lower()), None)
-
-    top_revistas = []
-    if col_revista:
-        top_revistas = df[col_revista].value_counts().head(10).reset_index().values.tolist()
-
-    
-    top_citados = []
-    if 'Title' in df.columns and col_citas:
-        df[col_citas] = pd.to_numeric(df[col_citas], errors='coerce').fillna(0)
-        top_df = df.sort_values(by=col_citas, ascending=False).head(10)
-        
-        top_citados = []
-        for _, fila in top_df.iterrows():
-            top_citados.append({
-                'titulo': str(fila['Title']),
-                'citas':  int(fila[col_citas]),
-                'apa':    formatear_apa(fila,col_revista,col_volumen,col_numero,col_paginas)
-            })
-
-    # ---------------- Afiliaciones ----------------
-    top_Afiliaciones = []
-    top_Ciudades = []
-    top_universidades = []
-
-    if col_afiliacion:
-        serieUniversidades = df[col_afiliacion].dropna().astype(str)
-        top_Afiliaciones = df[col_afiliacion].astype(str)\
-            .str.split(',').str[0]\
-            .value_counts().head(10).reset_index().values.tolist()
-        
-        serie_explotada = (
-            serieUniversidades
-            .str.split(';')       # parte cada celda en lista de afiliaciones
-            .explode()            # convierte cada elemento de la lista en su propia fila
-            .str.strip()          # quita espacios sobrantes
-            .loc[lambda s: s != '']  # descarta strings vacíos
-        )
-        universidades = (
-            serie_explotada
-            .str.split(',')
-            .str[0]             
-            .str.strip()
-        )
-        top_universidades = (
-            universidades
-            .value_counts()       # cuenta y ordena de mayor a menor automáticamente
-            .head(10)
-            .reset_index()
-            .values.tolist()
-        )
-        # El if puede parecer algo largo pero si no se hace de esta manera puede tronar si no hay columna de afiliación
-    
-    if col_ciudad:
-        top_Ciudades = (
-            df[col_ciudad]
-            .dropna()                          # elimina NaN reales antes de convertir
-            .astype(str)
-            .str.strip()
-            .loc[lambda s: s != '']            # descarta strings vacíos
-            .str.split(',')
-            .apply(lambda x: x[-1].strip() if isinstance(x, list) and len(x) > 0 else None)
-            .dropna()                          # elimina los None resultantes
-            .value_counts().head(10).reset_index().values.tolist()
-    )
-        
-        
-    # ---------------- Citas ----------------
-    promedio_citas_anual = None
-    #El promedio se calcula: citas totales/(año actual-año de publicación+1)
-    if col_citas and col_anio: 
-        anio_actual = datetime.datetime.now().year
-        
-        df_citas = df[[col_anio, col_citas]].copy()
-        df_citas[col_anio] = pd.to_numeric(df_citas[col_anio], errors= 'coerce')
-        df_citas[col_citas] = pd.to_numeric(df_citas[col_citas], errors='coerce')
-        df_citas = df_citas.dropna() 
-        
-        # Años transcurridos desde publicación 
-        df_citas['anios_activo'] = (anio_actual - df_citas[col_anio] + 1).clip(lower=1)
-
-        # Citas por año para cada artículo
-        df_citas['citas_por_anio'] = df_citas[col_citas] / df_citas['anios_activo']
-
-        promedio_citas_anual = round(float(df_citas['citas_por_anio'].mean()), 2)
-    # ---------------- Resultado ----------------
-    resumen = {
-        "confirmación": {
-            "archivo": nombre_archivo,
-            "mensaje": "Carga y procesamiento exitoso"
-        },
-        "metricas": {
-            "total_articulos": total_importados,
-            "articulos_validos": registros_con_titulo,
-            "afiliaciones_corregidas": conteo_vacios,
-            "min_autores": min_autores,
-            "max_autores": max_autores,
-            "promedio_autores": promedio_autores
-        },
-        "resumen_contenido": {
-            "libros": libros_resumen,
-            "autores": autores_resumen
-        },
-        "tops": {
-            "revistas": top_revistas,
-            "citados": top_citados
-        },
-        "Afiliaciones": {
-            "ciudades": top_Ciudades,
-            "Afiliaciones": top_Afiliaciones,
-            "Universidades": top_universidades
-        },
-        "autor_unico": {
-            "total":     total_autor_unico,
-            "articulos": articulos_autor_unico   
-        },
-        "promedio_citas_anual": promedio_citas_anual
-    }
-
-    return resumen
-
-  
-def filtrar_por_anio(df, inicio, fin):
-    """
-    Filtra el Dataframe por un rango de años
-    """
-    col_anio = next((c for c in df.columns if 'year' in c.lower() or 'año' in c.lower()), None)
-
-    if col_anio and inicio is not None and fin is not None:
-        df = df.copy()
-        df[col_anio] = pd.to_numeric(df[col_anio], errors = 'coerce')
-        df = df.dropna(subset = [col_anio])
-        return df[(df[col_anio] >=inicio) & (df[col_anio] <= fin)]
-    return df
-
-
-
-
-def actualizar_dataset(df_existente, df_nuevo):
-    try:
-        df_combinado  = pd.concat([df_existente, df_nuevo], ignore_index=True)
-        df_actualizado = df_combinado.drop_duplicates(subset=['Title'], keep='last')  
-        return df_actualizado
-    except Exception as e:
-        print(f"Error al actualizar: {e}")
-        return df_existente
-
-# --- RUTAS DE FLASK ---
+app.secret_key = "bibliometria_total_export_2026"
+ultimo_df = None
 
 @app.route('/')
 def index():
-    # render_template busca automáticamente en la carpeta templates y envía ese html al navegador
     return render_template('index.html')
 
-
 @app.route('/upload', methods=['POST'])
-def upload_file():
-    global ultimo_df_procesado, historial_busquedas
+def upload():
+    global ultimo_df
+    try:
+        if 'file' not in request.files:
+            return jsonify({"error": "No hay archivo"}), 400
+            
+        file = request.files['file']
+        df = pd.read_excel(file, engine='openpyxl') if file.filename.endswith(('.xlsx', '.xls')) else pd.read_csv(file)
 
-    
-    # request.files contiene lo que el usuario subió.
-    if 'file' not in request.files:
-        return jsonify({"status": "error", "message": "No se encontró el archivo"}), 400
-    
-    
-    # Extraemos el archivo de la petición
-    file = request.files['file']
-    
-    # Validamos que el archivo realmente tenga un nombre
-    if file.filename == '':
-        return jsonify({"status": "error", "message": "Nombre de archivo vacío"}), 400
-
-    try: 
-        # Se guarda temporalmente
-        nombre_seguro = secure_filename(file.filename or "archivo_sin_nombre") #El nombre seguro no es necesario pero se usa para evitar errores
-        filepath = os.path.join(UPLOAD_FOLDER, nombre_seguro)
-        file.save(filepath)
-
-        # Se leen los datos
-        df = src.data_loader.leer_archivo_datos(filepath)
-        
-        if df is None:
-            return jsonify({"status": "error", "message": "El archivo no contiene datos válidos"}), 400
+        df.columns = df.columns.str.strip()
         df = src.cleaner.limpiar_dataset(df)
-            
-        anio_inicio = request.form.get('anio_inicio', type = int)
-        anio_fin = request.form.get('anio_fin', type = int)
-        if anio_inicio and anio_fin:
-            df = filtrar_por_anio(df, anio_inicio, anio_fin)
-            
-        ultimo_df_procesado = df.copy()
-        #Esta línea es para evitar una error con el tipado
+        ultimo_df = df.copy()
 
-                              
-        total_sin_citas = src.metrics.obtener_articulo_sin_citas(df)
-        resumen: Dict[str, Any] = procesar_bibliometria(df, file.filename or "archivo")
-        resumen['metricas']['articulos_sin_citas'] = int(total_sin_citas)
-        resumen['wordcloud'] = generar_wordcloud(df)
-        resumen['analisis_avanzado'] = {
-        "rango": src.metrics.obtener_rango_anios(df),
-        "productividad": src.metrics.calcular_promedio_publicaciones(df),
-        "top_10": src.metrics.obtener_top_10_autores(df),
-        "top_citas_anuales": src.metrics.obtener_top_citas_anuales(df),
-        "tasa_crecimiento": src.metrics.calcular_tasa_crecimiento(df),
-        "idiomas": src.metrics.distribucion_idiomas(df)
+        mapeo = {
+            'titulo': ['title', 'titulo', 'ti', 'article title'],
+            'citas': ['citations', 'citas', 'tc', 'cite', 'times cited', 'cited by'],
+            'anio': ['year', 'anio', 'año', 'py', 'publication year'],
+            'autor': ['authors', 'author', 'autor', 'au']
         }
-            
+
+        def detectar(claves):
+            return next((c for c in df.columns if any(k == c.lower() for k in claves)), None)
+
+        c_titulo = detectar(mapeo['titulo'])
+        c_citas = detectar(mapeo['citas'])
+        c_anio = detectar(mapeo['anio'])
+        c_autor = detectar(mapeo['autor'])
+
+        if not c_titulo or not c_citas:
+            return jsonify({"error": "No se detectaron columnas de Título o Citas"}), 400
+
+        citas_serie = pd.to_numeric(df[c_citas], errors='coerce').fillna(0)
+        anios = pd.to_numeric(df[c_anio], errors='coerce').dropna() if c_anio else []
         
-            
-        registro = {
-            "archivo": file.filename,
-            "fecha": pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
-            "filtro_inicio": anio_inicio if anio_inicio else "N/A",
-            "filtro_fin": anio_fin if anio_fin else "N/A",
-            "registros": len(df)
-        }
-        historial_busquedas.append(registro)
-
-            
-        return jsonify(resumen), 200
-    except Exception as e:
-            print(f"Error en upload: {str(e)}")
-            return jsonify({"status": "error", "message": str(e)}), 500
-
-
-
-@app.route('/historial', methods=['GET'])
-def obtener_historial():
-    return jsonify({"datos": historial_busquedas[::-1]}), 200
-
-@app.route('/buscar', methods=['POST'])
-def buscar_datos():
-    global ultimo_df_procesado                          # ← usa esto, no "df"
-
-    if ultimo_df_procesado is None:
-        return jsonify({"status": "error", "message": "No hay datos cargados"}), 400
-
-    filtros = request.json
-    if not filtros:
-        return jsonify({"status": "error", "message": "No se recibieron filtros"}), 400
-
-    try:
-        df_filtrado = ultimo_df_procesado.copy()        # ← era df.copy(), incorrecto
-        for columna, valor in filtros.items():
-            if valor and columna in df_filtrado.columns:
-                df_filtrado = df_filtrado[
-                    df_filtrado[columna].astype(str).str.contains(str(valor), case=False, na=False)
-                ]
         return jsonify({
-            "status": "success",
-            "resultados_encontrados": len(df_filtrado),
-            "datos": df_filtrado.to_dict(orient='records')  # ← era df_[filtrado.to_dict], typo
+            "rango_anios": {"mensaje_formateado": f"{int(min(anios))}-{int(max(anios))}" if len(anios)>0 else "S/D"},
+            "total_citas": {"mensaje_formateado": str(int(citas_serie.sum()))},
+            "impacto_citas": {"mensaje_formateado": str(round(citas_serie.mean(), 2))},
+            "proporcion_citadas": {"mensaje_formateado": f"{((citas_serie > 0).mean() * 100):.1f}%"},
+            "analisis_avanzado": {
+                "top_10": [{"Author": k, "Count": int(v)} for k, v in df[c_autor].str.split(';').explode().str.strip().value_counts().head(10).items()] if c_autor else [],
+                "top_trabajos": [{"titulo": str(row[c_titulo]), "citas": int(row[c_citas])} for _, row in df.sort_values(by=c_citas, ascending=False).head(10).iterrows()]
+            }
         }), 200
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/analisis/conectores', methods=['GET'])
-def identificar_conectores():
-    global ultimo_df_procesado                          # ← usa esto, no "df"
+@app.route('/exportar/excel')
+def export_excel():
+    if ultimo_df is None: return "Sin datos", 400
+    out = io.BytesIO()
+    ultimo_df.to_excel(out, index=False)
+    out.seek(0)
+    return send_file(out, as_attachment=True, download_name="analisis_bibliometrico.xlsx")
 
-    if ultimo_df_procesado is None:
-        return jsonify({"status": "error", "message": "No hay datos cargados"}), 400
-
-    try:
-        df = ultimo_df_procesado.copy()
-        col_autor = next(
-            (c for c in df.columns if c.lower() in ('authors', 'author', 'au')), None
-        )
-        if col_autor is None:
-            return jsonify({"status": "error", "message": "No se encontró columna de autores"}), 400
-
-        # Explotar autores en filas individuales
-        autores_explotados = (
-            df[col_autor].dropna().astype(str)
-            .str.split(';')
-            .explode()
-            .str.strip()
-        )
-        conectores = autores_explotados.value_counts().head(10).to_dict()  # ← lógica corregida
-
-        return jsonify({
-            "status": "success",
-            "descripcion": "Autores con mayor número de publicaciones",
-            "data": conectores
-        }), 200
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-@app.route('/analisis/anomalias', methods=['GET'])
-def detectar_anomalias():
-    global ultimo_df_procesado                         
-
-    if ultimo_df_procesado is None:
-        return jsonify({"status": "error", "message": "No hay datos cargados"}), 400
-
-    try:
-        df = ultimo_df_procesado.copy()
-        col_citas = next((c for c in df.columns if 'cite' in c.lower()), None)  # ← detecta la columna dinámicamente
-
-        if col_citas is None:
-            return jsonify({"status": "error", "message": "No se encontró columna de citas"}), 400
-        
-        serie_citas = pd.to_numeric(df[col_citas], errors='coerce')
-        data_puntos = serie_citas.dropna()
-        
-        Q1  = data_puntos.quantile(0.25)
-        Q3  = data_puntos.quantile(0.75)
-        IQR = Q3 - Q1
-        limite_superior = Q3 + 1.5 * IQR
-
-        exitos = df[serie_citas > limite_superior]
-
-        col_titulo = 'Title'   if 'Title'   in df.columns else None
-        col_autor  = 'Authors' if 'Authors' in df.columns else None
-
-        cols = [c for c in [col_titulo, col_autor, col_citas] if c]  # solo columnas que existen
-        return jsonify({
-            "status": "success",
-            "total_anomalias_detectadas": len(exitos),
-            "limite_calculado": limite_superior,
-            "casos_extraordinarios": exitos[cols].to_dict(orient='records')
-        }), 200
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-
-
-# Descargas de archivos(Excel y Word)
-@app.route('/download/excel')
-def descargar_excel():
-    if ultimo_df_procesado is not None:
-        buffer = src.metrics.excel_descargar(ultimo_df_procesado)
-        return send_file(buffer, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name='reporte.xlsx')
-    return jsonify({"error": "Sin datos"}), 400
-
-@app.route('/download/word')
-def descargar_word():
-    if ultimo_df_procesado is not None:
-        buffer = src.metrics.word_descargar(ultimo_df_procesado, titulo="Reporte Bibliométrico")
-        return send_file(buffer, mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document', as_attachment=True, download_name='reporte.docx')
-    return jsonify({"error": "Sin datos"}), 400
-"""
-        return jsonify({"error": "Nombre vacío"}), 400
-
-    # os.path.join une la ruta de la carpeta con el nombre del archivo de forma segura
-    filepath = os.path.join(UPLOAD_FOLDER, file.filename)
+@app.route('/exportar/word')
+def export_word():
+    if ultimo_df is None: return "Sin datos", 400
     
-    # Guardamos físicamente el archivo en el disco duro de la computadora.
-    file.save(filepath)
-    
-    # Registramos este archivo como el proyecto activo en la memoria de la sesión
-    session['proyecto_actual'] = file.filename
-    
-    # Llamamos a la función, pasamos la ruta y nos devuelve un DataFrame
-    df = leer_archivo_datos(filepath)
+    doc = Document()
+    doc.add_heading('Reporte Bibliométrico Integral', 0)
+    doc.add_paragraph(f"Total de registros exportados: {len(ultimo_df)}")
 
-    # Verificamos si el puntero no es null
-    if df is not None:
-        
-        columnas = list(df.columns)
-        total_filas = len(df)
+    table = doc.add_table(rows=1, cols=len(ultimo_df.columns))
+    table.style = 'Table Grid'
 
-        # Ejecución de todas las métricas
-        resultado_anios = obtener_rango_anios(df)
-        resultado_promedio = calcular_promedio_publicaciones(df)
-        top_10 = obtener_top_10_autores(df)
-        coautorias = contabilizar_coautorias(df)
-        promedio_citas = calcular_promedio_citas(df)
-        proporcion_citas = calcular_proporcion_citadas(df)
-        
-        # jsonify convierte el diccionario de Python en un formato JSON que Dropzone entiende
-        return jsonify ({
-            "mensaje": "Archivo cargado y procesado",
-            "columnas": columnas,
-            "total_registros": total_filas,
-            "rango_anios": resultado_anios,
-            "promedio_autores": resultado_promedio,
-            "top_10_autores": top_10,
-            "coautorias": coautorias,
-            "impacto_citas": promedio_citas,
-            "proporcion_citadas": proporcion_citas
-        }), 200 # Código de éxito HTTP
-        
-    else:
-        # Si la función devolvió None, mandamos un error 500
-        return jsonify({"error": "No se pudo procesar el contenido del archivo"}), 500
-"""
-#-----------------------------------------------------------------------------------------------
+    hdr_cells = table.rows[0].cells
+    for i, col in enumerate(ultimo_df.columns):
+        hdr_cells[i].text = str(col)
 
-@app.route('/top-trabajos')
-def top_trabajos():
-    proyecto_actual = session.get('proyecto_actual')
-    
-    if not proyecto_actual:
-        return "Primero debes subir un archivo o seleccionar un proyecto existente."
-        
-    ruta_archivo = os.path.join(UPLOAD_FOLDER, proyecto_actual)
-    df = src.data_loader.leer_archivo_datos(ruta_archivo)
-    
-    if df is not None:
-        top_10_data = src.metrics.obtener_top_10_trabajos(df)
-        return render_template('top_trabajos.html', trabajos=top_10_data)
-    else:
-        return "Hubo un error al leer el archivo de datos."
+    for _, row in ultimo_df.iterrows():
+        row_cells = table.add_row().cells
+        for i, val in enumerate(row):
+            row_cells[i].text = str(val) if pd.notna(val) else ""
+            for paragraph in row_cells[i].paragraphs:
+                for run in paragraph.runs:
+                    run.font.size = Pt(8)
 
-#-----------------------------------------------------------------------------------------------
+    out = io.BytesIO()
+    doc.save(out)
+    out.seek(0)
+    return send_file(out, as_attachment=True, download_name="reporte_completo.docx")
 
-@app.route('/universidad/<nombre_universidad>')
-def articulos_universidad(nombre_universidad):
-    proyecto_actual = session.get('proyecto_actual')
-    
-    if not proyecto_actual:
-        return "Primero debes subir un archivo o seleccionar un proyecto existente."
-        
-    ruta_archivo = os.path.join(UPLOAD_FOLDER, proyecto_actual)
-    df = src.data_loader.leer_archivo_datos(ruta_archivo)
-    
-    if df is not None:
-        articulos_encontrados = src.metrics.obtener_articulos_por_universidad(df, nombre_universidad)
-        return render_template('universidad.html', 
-                               nombre_buscado=nombre_universidad, 
-                               articulos=articulos_encontrados)
-    else:
-        return "Error al leer el archivo."
-
-#-----------------------------------------------------------------------------------------------
-
-@app.route('/paises')
-def lista_paises():
-    proyecto_actual = session.get('proyecto_actual')
-    
-    if not proyecto_actual:
-        return "Primero debes subir un archivo o seleccionar un proyecto existente."
-        
-    ruta_archivo = os.path.join(UPLOAD_FOLDER, proyecto_actual)
-    df = src.data_loader.leer_archivo_datos(ruta_archivo)
-    
-    if df is not None:
-        datos_paises = src.metrics.obtener_lista_paises(df)
-        return render_template('paises.html', paises=datos_paises)
-    else:
-        return "Error al leer el archivo de datos."
-
-#-----------------------------------------------------------------------------------------------
-
-@app.route('/articulo/<path:titulo>')
-def detalle_articulo(titulo):
-    proyecto_actual = session.get('proyecto_actual')
-    
-    if not proyecto_actual:
-        return "Primero debes subir un archivo o seleccionar un proyecto existente."
-        
-    ruta_archivo = os.path.join(UPLOAD_FOLDER, proyecto_actual)
-    df = src.data_loader.leer_archivo_datos(ruta_archivo)
-    
-    if df is not None:
-        datos_completos = src.metrics.obtener_detalle_articulo(df, titulo)
-        return render_template('articulo.html', detalle=datos_completos)
-    else:
-        return "Error al leer el archivo de datos."
-
-#-----------------------------------------------------------------------------------------------
-
-@app.route('/proyectos')
-def gestor_proyectos():
-    archivos_disponibles = os.listdir(UPLOAD_FOLDER)
-    proyecto_activo = session.get('proyecto_actual')
-    return render_template('proyectos.html', archivos=archivos_disponibles, actual=proyecto_activo)
-
-#-----------------------------------------------------------------------------------------------
-
-@app.route('/seleccionar-proyecto/<nombre_archivo>')
-def seleccionar_proyecto(nombre_archivo):
-    session['proyecto_actual'] = nombre_archivo
-    return redirect('/')
-
-#-----------------------------------------------------------------------------------------------
-
-@app.route('/exportar/<metrica>')
-def exportar_csv(metrica):
-    # Verificamos que haya un proyecto activo
-    proyecto_actual = session.get('proyecto_actual')
-    if not proyecto_actual:
-        return "Primero debes subir un archivo.", 400
-        
-    ruta_archivo = os.path.join(UPLOAD_FOLDER, proyecto_actual)
-    df = src.data_loader.leer_archivo_datos(ruta_archivo)
-    
-    if df is None:
-        return "Error al leer los datos.", 500
-
-    # Dependiendo de qué botón presionó el usuario, calculamos esa métrica específica
-    if metrica == 'paises':
-        datos = src.metrics.obtener_lista_paises(df)
-        nombre_archivo = "lista_paises.csv"
-    elif metrica == 'top_trabajos':
-        datos = src.metrics.obtener_top_10_trabajos(df)
-        nombre_archivo = "top_10_trabajos.csv"
-    elif metrica == 'top_autores':
-        datos = src.metrics.obtener_top_10_autores(df)
-        nombre_archivo = "top_10_autores.csv"
-    else:
-        return "Métrica no válida para exportación.", 404
-
-    # Convertimos la lista de resultados en un DataFrame temporal de Pandas
-    df_export = pd.DataFrame(datos)
-    
-    # Lo transformamos a formato texto CSV (index=False evita que se imprima la columna de números 0,1,2...)
-    csv_data = df_export.to_csv(index=False)
-    
-    # Devolvemos el texto disfrazado de archivo descargable
-    return Response(
-        csv_data,
-        mimetype="text/csv",
-        headers={"Content-disposition": f"attachment; filename={nombre_archivo}"}
-    )
-
-#-----------------------------------------------------------------------------------------------
+@app.route('/exportar/paises')
+def export_paises():
+    if ultimo_df is None: return "Sin datos", 400
+    paises = src.metrics.obtener_lista_paises(ultimo_df)
+    df_paises = pd.DataFrame(paises)
+    out = io.BytesIO()
+    df_paises.to_excel(out, index=False)
+    out.seek(0)
+    return send_file(out, as_attachment=True, download_name="distribucion_geografica.xlsx")
 
 if __name__ == '__main__':
-    # Arrancamos el servidor.
-    app.run(debug=True)
-    """
-    Esto es para prueba
-    
-ruta= "simon&pumba.csv"
-dataframe = leer_archivo_datos(ruta)
-resultado_final = procesar_bibliometria(dataframe, os.path.basename(ruta))
-
-print(resultado_final)
-    """
+    app.run(debug=True, port=5000)
