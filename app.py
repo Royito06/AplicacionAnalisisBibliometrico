@@ -7,17 +7,11 @@ from typing import Any, Dict
 from werkzeug.utils import secure_filename
 from src.data_loader import leer_archivo_datos
 from src.cleaner import limpiar_dataset
-from src.metrics import (
-    obtener_rango_anios,
-    calcular_promedio_publicaciones,
-    obtener_top_10_autores,
-    obtener_articulo_sin_citas,
-    excel_descargar,
-    word_descargar,
-    calcular_h_index,       
-    distribucion_documentos
-)
+import src.metrics 
 
+import base64
+import matplotlib.pyplot as plt
+from wordcloud import WordCloud
 
 
 app = Flask(__name__)
@@ -25,6 +19,7 @@ UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 ultimo_df_procesado = None
+historial_busquedas = []
 
 # --- Funciones ---    
 def es_autor_unico(valor):
@@ -68,6 +63,20 @@ def formatear_apa(fila, col_revista, col_volumen, col_numero, col_paginas):
     return ref
   
 
+def generar_wordcloud(df):
+    if 'Title' not in df.columns or df['Title'].empty:
+        return None
+    texto = " ".join(titulo for titulo in df['Title'].astype(str))
+    wc = WordCloud(width=800, height=400, background_color='white').generate(texto)
+    img = io.BytesIO()
+    plt.figure(figsize=(10, 5))
+    plt.imshow(wc, interpolation='bilinear')
+    plt.axis('off')
+    plt.savefig(img, format='png', bbox_inches='tight')
+    plt.close()
+    img.seek(0)
+    return base64.b64encode(img.getvalue()).decode()
+
 def procesar_bibliometria(df, nombre_archivo):
     if df is None or df.empty:
         return {"error": "El dataframe está vacío o es inválido"}
@@ -96,20 +105,15 @@ def procesar_bibliometria(df, nombre_archivo):
 
     # ---------------- Afiliaciones ----------------
     col_afiliacion = next((c for c in df.columns if 'affilia' in c.lower() or 'institu' in c.lower()), None)
-
     conteo_vacios = 0
     if col_afiliacion:
         conteo_vacios = int(df[col_afiliacion].isna().sum())
         df[col_afiliacion] = df[col_afiliacion].fillna('Afiliación Desconocida')
-        print(f"Se limpió la columna: {col_afiliacion}")
-    else:
-        print("No se encontró columna de afiliación.")
-
+    
     total_importados = int(df.shape[0])
-
-    # ---------------- TITULOS ----------------
-    if 'Title' not in df.columns:
-        print(" No se encontró columna Title")
+    col_titulo = next((c for c in df.columns if 'titl' in c.lower()), None)
+    if col_titulo:
+        df.rename(columns={col_titulo: 'Title'}, inplace=True)
     
     registros_con_titulo = int(df['Title'].dropna().count()) if 'Title' in df.columns else 0
     libros_resumen = df['Title'].dropna().head(20).tolist() if 'Title' in df.columns else []
@@ -319,20 +323,16 @@ def index():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    global ultimo_df_procesado
+    global ultimo_df_procesado, historial_busquedas
 
     if 'file' not in request.files:
-        return jsonify({
-        "status": "error",
-        "message": "Solicitud malformada: No se encontró el archivo."
-    }), 400
+        return jsonify({"status": "error", "message": "No se encontró el archivo"}), 400
+    
     
     file = request.files['file']
     if file.filename == '':
-        return jsonify({
-        "status": "error",
-        "message": "Operación cancelada: No se seleccionó ningún archivo/Nombre vacío."
-    }), 400
+        return jsonify({"status": "error", "message": "Nombre de archivo vacío"}), 400
+
     try: 
         # Se guarda temporalmente
         nombre_seguro = secure_filename(file.filename or "archivo_sin_nombre") #El nombre seguro no es necesario pero se usa para evitar errores
@@ -341,60 +341,55 @@ def upload_file():
 
         # Se leen los datos
         df = leer_archivo_datos(filepath)
-        if df is not None:
-            df = limpiar_dataset(df)
+        
+        if df is None:
+            return jsonify({"status": "error", "message": "El archivo no contiene datos válidos"}), 400
+        df = limpiar_dataset(df)
             
-            anio_inicio = request.form.get('anio_inicio', type = int)
-            anio_fin = request.form.get('anio_fin', type = int)
-            if anio_inicio and anio_fin:
-                df = filtrar_por_anio(df, anio_inicio, anio_fin)
+        anio_inicio = request.form.get('anio_inicio', type = int)
+        anio_fin = request.form.get('anio_fin', type = int)
+        if anio_inicio and anio_fin:
+            df = filtrar_por_anio(df, anio_inicio, anio_fin)
             
-            ultimo_df_procesado = df.copy()
-            #Esta línea es para evitar una error con el tipado
+        ultimo_df_procesado = df.copy()
+        #Esta línea es para evitar una error con el tipado
 
+                              
+        total_sin_citas = src.metrics.obtener_articulo_sin_citas(df)
+        resumen: Dict[str, Any] = procesar_bibliometria(df, file.filename or "archivo")
+        resumen['metricas']['articulos_sin_citas'] = int(total_sin_citas)
+        resumen['wordcloud'] = generar_wordcloud(df)
+        resumen['analisis_avanzado'] = {
+        "rango": src.metrics.obtener_rango_anios(df),
+        "productividad": src.metrics.calcular_promedio_publicaciones(df),
+        "top_10": src.metrics.obtener_top_10_autores(df),
+        "top_citas_anuales": src.metrics.obtener_top_citas_anuales(df),
+        "tasa_crecimiento": src.metrics.calcular_tasa_crecimiento(df),
+        "idiomas": src.metrics.distribucion_idiomas(df)
+        }
+            
+        ultimo_df_procesado = df.copy()
+            
+        registro = {
+            "archivo": file.filename,
+            "fecha": pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
+            "filtro_inicio": anio_inicio if anio_inicio else "N/A",
+            "filtro_fin": anio_fin if anio_fin else "N/A",
+            "registros": len(df)
+        }
+        historial_busquedas.append(registro)
 
-            total_sin_citas = obtener_articulo_sin_citas(df)
-            resumen: Dict[str, Any] = procesar_bibliometria(df, file.filename or "archivo")
-            resumen['metricas']['articulos_sin_citas'] = int(total_sin_citas)
-            resumen['analisis_avanzado'] = {
-                "rango": obtener_rango_anios(df),
-                "productividad": calcular_promedio_publicaciones(df),
-                "top_10": obtener_top_10_autores(df)
-            }
-            return jsonify(resumen), 200
-        else:
-            return jsonify({
-            "status": "error",
-            "message": "No se pudo procesar"
-            }), 500
             
-        """
-        if df is not None:
-            #Aquí se maneja el dataframe
-            columnas = list(df.columns)
-            total_filas = len(df)
-            
-            return jsonify({
-                "mensaje": "Archivo cargado y procesado",
-                "columnas": columnas,
-                "total_registros": total_filas
-            }), 200
-        else:
-            
-            return jsonify({
-                "status": "error",
-                "message": "No se pudo procesar el contenido. Verifica el formato del archivo."
-            }), 500
-            
-            
-        """
+        return jsonify(resumen), 200
     except Exception as e:
-        # Error crítico (ej. no se pudo guardar el archivo en disco)
-        return jsonify({
-            "status": "error",
-            "message": "Error crítico en el servidor.",
-            "details": str(e)
-        }), 500
+            print(f"Error en upload: {str(e)}")
+            return jsonify({"status": "error", "message": str(e)}), 500
+
+
+
+@app.route('/historial', methods=['GET'])
+def obtener_historial():
+    return jsonify({"datos": historial_busquedas[::-1]}), 200
 
 @app.route('/buscar', methods=['POST'])
 def buscar_datos():
@@ -494,39 +489,20 @@ def detectar_anomalias():
 # Descargas de archivos(Excel y Word)
 @app.route('/download/excel')
 def descargar_excel():
-    """Genera y descarga el archivo Excel basado en el último procesamiento."""
-    global ultimo_df_procesado
     if ultimo_df_procesado is not None:
-        # Llamamos a la función de exportación que tienes en metrics.py
-        buffer = excel_descargar(ultimo_df_procesado)
-        return send_file(
-            buffer, 
-            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            as_attachment=True, 
-            download_name='reporte_bibliometrico.xlsx'
-        )
-    return jsonify({"error": "No hay datos procesados disponibles"}), 400
+        buffer = src.metrics.excel_descargar(ultimo_df_procesado)
+        return send_file(buffer, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name='reporte.xlsx')
+    return jsonify({"error": "Sin datos"}), 400
 
 @app.route('/download/word')
 def descargar_word():
-    """Genera y descarga el reporte en Word basado en el último procesamiento."""
-    global ultimo_df_procesado
     if ultimo_df_procesado is not None:
-        # Llamamos a la función de exportación que tienes en metrics.py
-        buffer = word_descargar(ultimo_df_procesado, titulo="Reporte de Análisis Bibliométrico")
-        return send_file(
-            buffer, 
-            mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            as_attachment=True, 
-            download_name='reporte_bibliometrico.docx'
-        )
-    return jsonify({"error": "No hay datos procesados disponibles"}), 400
+        buffer = src.metrics.word_descargar(ultimo_df_procesado, titulo="Reporte Bibliométrico")
+        return send_file(buffer, mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document', as_attachment=True, download_name='reporte.docx')
+    return jsonify({"error": "Sin datos"}), 400
 
 if __name__ == '__main__':
-    
     app.run(debug=True)
-    
-    
     """
     Esto es para prueba
     

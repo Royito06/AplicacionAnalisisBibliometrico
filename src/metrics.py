@@ -141,6 +141,47 @@ def obtener_articulo_sin_citas(df):
         return int((serie == 0).sum())   # NaN no cuenta como 0
     return 0
 
+def obtener_top_citas_anuales(df, top=10):
+    """Calcula el promedio de citas anuales"""
+    import datetime
+    anio_actual = datetime.datetime.now().year
+    
+    df = df.copy()
+    col_citas = next((c for c in df.columns if 'times cited, wos' in c.lower()), None)
+    col_anios = next((c for c in df.columns if 'year' in c.lower() or 'año' in c.lower()), None)
+
+    if col_citas and col_anios:
+        df[col_citas] = pd.to_numeric(df[col_citas], errors = 'coerce').fillna(0)
+        df[col_anios] = pd.to_numeric(df[col_anios], errors = 'coerce')
+
+        df['antiguedad'] = anio_actual - df[col_anios] + 1
+        df['promedio_citas'] = df[col_citas] / df['antiguedad']
+
+        top_df = df.sort_values(by = 'promedio_citas', ascending = False).head(top)
+        return top_df[['Title', 'promedio_citas']].to_dict(orient = 'records')
+    return []
+
+def calcular_tasa_crecimiento(df):
+    col_anio = next((c for c in df.columns if 'year' in c.lower() or 'año' in c.lower()), None)
+    if not col_anio:
+        return []
+    conteo_anual = df[col_anio].value_counts().sort_index()
+    tasa = conteo_anual.pct_change()*100
+
+    resultado = []
+    for anio, valor in tasa.items():
+        resultado.append({
+            "año": int(anio),
+            "crecimiento": round(valor, 2) if pd.notnull(valor) else 0 
+        })
+    return resultado
+
+def distribucion_idiomas(df):
+    col_idioma = next((c for c in df.columns if 'lang' in c.lower() or 'idioma' in c.lower()), None)
+    if not col_idioma:
+        return {}
+    distribucion = df[col_idioma].value_counts().to_dict()
+    return distribucion
 #--------------------------------------------------------------------------------------------
 ##Exportación de Docs
 

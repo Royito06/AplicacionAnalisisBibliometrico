@@ -1,23 +1,7 @@
 import pandas as pd
 import os
 import xlrd
-"""
-def leer_archivo_datos(ruta_archivo):
-    
-    #Lee un archivo CSV o Excel y devuelve un DataFrame de Pandas.
-    
-    extension = os.path.splitext(ruta_archivo)[1].lower()
-    try:
-        if extension == '.csv':
-            df = pd.read_csv(ruta_archivo)
-        elif extension in ['.xls', '.xlsx']:
-            df = pd.read_excel(ruta_archivo)
-        else:
-            return None
-        return df
-    except Exception as e:
-        return {"error": "Error interno: {e}"}
-    """
+
 def leer_archivo_datos(filepath):
     import pandas as pd
     import os
@@ -78,7 +62,7 @@ def leer_archivo_datos(filepath):
         else:
             raise ValueError(f"Formato no soportado: {ext}")
 
-        # ------------------- LIMPIEZA CLAVE 🔧 -------------------
+        # ------------------- LIMPIEZA CLAVE  -------------------
         if df is not None:
             # Quitar espacios invisibles en nombres de columnas
             df.columns = df.columns.str.strip()
@@ -97,5 +81,5 @@ def leer_archivo_datos(filepath):
         return None
 
     except Exception as e:
-        print("🚨 ERROR LEYENDO ARCHIVO:", e)
+        print(" ERROR LEYENDO ARCHIVO:", e)
         return None
