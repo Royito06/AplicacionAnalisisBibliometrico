@@ -50,7 +50,7 @@ def leer_archivo_datos(filepath):
             try:
                 df = pd.read_csv(
                     filepath,
-                    encoding='utf-8-sig',   # ← utf-8-sig elimina el BOM automáticamente
+                    encoding='utf-8-sig',   
                     sep=None,
                     engine='python',
                     on_bad_lines='skip'

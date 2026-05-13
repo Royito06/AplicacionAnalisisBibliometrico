@@ -83,43 +83,34 @@ def calcular_promedio_publicaciones(df):
 #--------------------------------------------------------------------------------------------
 
 def obtener_top_10_autores(df):
-    """
-    Desempaqueta las listas de autores, cuenta su frecuencia y devuelve los 10 principales.
-    """
     df = df.copy()
-    # Buscamos la columna de autores igual que en la función anterior
     posibles_nombres = ['Autor', 'Autores', 'Author', 'Authors', 'AU']
     col_autor = None
-    
+
     for col in df.columns:
         if col in posibles_nombres:
             col_autor = col
             break
-            
+
     if col_autor is None:
         return []
-        
+
     df_limpio = df.dropna(subset=[col_autor])
-    
-    # Separamos los autores por comas y los pasamos a listas.
-    autores_en_listas = df_limpio[col_autor].astype(str).str.replace(';', ',').str.split(',')
-    
-    # Toma la lista de cada celda y crea una fila nueva para cada autor
-    autores_individuales = autores_en_listas.explode()
-    
-    # Limpiamos los espacios en blanco
-    autores_individuales = autores_individuales.str.strip()
-    
-    # Filtramos para eliminar espacios vacíos en caso de que haya 2 comas
+
+    # Separar SOLO por ";" — la coma es parte del nombre (Apellido, Inicial)
+    autores_individuales = (
+        df_limpio[col_autor]
+        .astype(str)
+        .str.split(';')       # ← solo punto y coma, sin tocar las comas
+        .explode()
+        .str.strip()
+    )
+
     autores_individuales = autores_individuales[autores_individuales != ""]
-    
-    # cuenta las repeticiones de cada nombre y los ordena y toma los primeros 10
+
     top_10_serie = autores_individuales.value_counts().head(10)
-    
-    # Convertimos el resultado a una lista de diccionarios
-    resultado = [{"autor": autor, "cantidad": int(cantidad)} for autor, cantidad in top_10_serie.items()]
-    
-    return resultado
+
+    return [{"autor": autor, "cantidad": int(cantidad)} for autor, cantidad in top_10_serie.items()]
 
 #--------------------------------------------------------------------------------------------
 
@@ -199,17 +190,14 @@ def obtener_articulos_por_universidad(df, nombre_universidad):
     Filtra el dataset para devolver solo los artículos que pertenezcan a una universidad específica.
     """
     # buscamos la columna de afiliación y la de título
-    posibles_afiliaciones = ['Afiliación', 'Affiliation', 'C1', 'Institución', 'Institution']
-    posibles_titulos = ['Título', 'Title', 'TI', 'Article Title']
-    
     col_afil = None
     col_titulo = None
     
-    for col in df.columns:
-        if col in posibles_afiliaciones:
-            col_afil = col
-        if col in posibles_titulos:
-            col_titulo = col
+    col_afil   = next((c for c in df.columns if 'affil' in c.lower() or 'instit' in c.lower()), None)
+    col_titulo = next((c for c in df.columns if 'titl' in c.lower()), None)
+    
+    
+
             
     if not col_afil or not col_titulo:
         return [] # vacío si faltan columnas
@@ -237,13 +225,11 @@ def calcular_promedio_citas(df):
     Calcula el promedio de citas por artículo sumando todas las citas 
     y dividiéndolas entre el total de publicaciones.
     """
-    posibles_citas = ['Citas', 'TC', 'Times Cited', 'Citations']
-    col_citas = None
+    col_citas = None    
+    col_citas = next((c for c in df.columns if 'cite' in c.lower() or 'cit' in c.lower()), None)
+
     
-    for col in df.columns:
-        if col in posibles_citas:
-            col_citas = col
-            break
+
             
     if col_citas is None:
         return {"error": "No se encontró la columna de Citas en el dataset."}
@@ -269,38 +255,64 @@ def calcular_promedio_citas(df):
 #--------------------------------------------------------------------------------------------
 
 def obtener_lista_paises(df):
-    """
-    Extrae, limpia y cuenta todos los países únicos que participan en los papers
-    """
-    col_pais = None
-    col_pais = next((c for c in df.columns if 'countr' in c.lower() or 'país' in c.lower()), None)
-    
+    # --- Paso 1: buscar columna de país explícita (WoS tiene 'Country') ---
+    col_pais = next(
+        (c for c in df.columns if 'countr' in c.lower() or 'país' in c.lower()),
+        None
+    )
+    if col_pais:
+        paises = (
+            df[col_pais].dropna().astype(str)
+            .str.split(';').explode().str.strip()
+            .loc[lambda s: s != '']
+            .value_counts()
+        )
+        return [{"pais": p, "cantidad": int(n)} for p, n in paises.items()]
 
-            
-    if col_pais is None:
-        return [] # retornamos si no hay nada
-        
-    df_limpio = df.dropna(subset=[col_pais])
-    
-    # Separamos los países por si vienen varios en una celda "USA; Mexico; Spain"
-    paises_en_listas = df_limpio[col_pais].astype(str).str.replace(';', ',').str.split(',')
-    
-    # desempaquetamos para que cada país tenga su propia fila
-    paises_individuales = paises_en_listas.explode()
-    
-    # Limpiamos espacios 
-    paises_individuales = paises_individuales.str.strip()
-    
-    # Para eliminar celdas vacías
-    paises_individuales = paises_individuales[paises_individuales != ""]
-    
-    # cuenta cuántas veces se repite cada país y los ordena de mayor a menor
-    conteo_paises = paises_individuales.value_counts()
-    
-    # Convertimos la serie a una lista de diccionarios para enviarla a HTML
-    resultados = [{"pais": pais, "cantidad": int(cantidad)} for pais, cantidad in conteo_paises.items()]
-    
-    return resultados
+    # --- Paso 2: extraer de Affiliations (Scopus) ---
+    # Scopus usa "Affiliations" — buscar con nombre limpio
+    col_afil = next(
+        (c for c in df.columns if 'affil' in c.lower()),
+        None
+    )
+    if col_afil is None:
+        return []
+
+    paises_extraidos = []
+
+    for celda in df[col_afil].dropna().astype(str):
+        # Cada celda tiene varias afiliaciones separadas por ";"
+        for afiliacion in celda.split(';'):
+            afiliacion = afiliacion.strip()
+            if not afiliacion:
+                continue
+            # El país es el último fragmento separado por coma
+            # pero hay que limpiar espacios, números y puntuación suelta
+            partes = [p.strip() for p in afiliacion.split(',') if p.strip()]
+            if len(partes) < 2:
+                continue  # si solo hay un fragmento, no es útil
+            candidato = partes[-1]
+            # Descartar si es claramente un código postal o número
+            if candidato.replace(' ', '').isdigit():
+                candidato = partes[-2] if len(partes) >= 2 else None
+            if candidato:
+                paises_extraidos.append(candidato)
+
+    if not paises_extraidos:
+        return []
+
+    serie = pd.Series(paises_extraidos).str.strip()
+    # Normalizar variantes comunes
+    normalizacion = {
+        'United States': ['USA', 'U.S.A.', 'U.S.', 'United States of America'],
+        'United Kingdom': ['UK', 'U.K.', 'England', 'Scotland', 'Wales'],
+        'China': ["People's Republic of China", 'P.R. China', 'PR China'],
+    }
+    for nombre_correcto, variantes in normalizacion.items():
+        serie = serie.replace(variantes, nombre_correcto)
+
+    conteo = serie.value_counts()
+    return [{"pais": p, "cantidad": int(n)} for p, n in conteo.items()]
 
 #--------------------------------------------------------------------------------------------
 
@@ -449,41 +461,155 @@ def distribucion_idiomas(df):
     distribucion = df[col_idioma].value_counts().to_dict()
     return distribucion
 #--------------------------------------------------------------------------------------------
-##Exportación de Docs
-
-def excel_descargar(df):
+  
+    
+def excel_descargar(df, resumen):
     """
-    Convierte un Dataframe en un archivo Excel en memoria (buffer)
+    Exporta un Excel con una hoja por métrica analizada.
+    resumen es el diccionario que devuelve procesar_bibliometria()
     """
     output = io.BytesIO()
 
-    with pd.ExcelWriter(output, engine = 'openpyxl') as writer:
-        df.to_excel(writer, index = False, sheet_name = 'Resultados_Bibliometricos')
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+
+        # Hoja 1 — Métricas generales
+        metricas = resumen.get('metricas', {})
+        pd.DataFrame([metricas]).to_excel(writer, sheet_name='Metricas_Generales', index=False)
+
+        # Hoja 2 — Top 10 trabajos más citados con APA
+        citados = resumen.get('tops', {}).get('citados', [])
+        if citados:
+            pd.DataFrame(citados).to_excel(writer, sheet_name='Top_Citados', index=False)
+
+        # Hoja 3 — Top 10 autores
+        top_autores = resumen.get('analisis_avanzado', {}).get('top_10', [])
+        if top_autores:
+            pd.DataFrame(top_autores).to_excel(writer, sheet_name='Top_Autores', index=False)
+
+        # Hoja 4 — Universidades
+        univs = resumen.get('Afiliaciones', {}).get('Universidades', [])
+        if univs:
+            pd.DataFrame(univs, columns=['Universidad', 'Frecuencia']).to_excel(
+                writer, sheet_name='Universidades', index=False)
+
+        # Hoja 5 — Países
+        paises = resumen.get('tops', {}).get('paises', [])
+        if paises:
+            pd.DataFrame(paises, columns=['País', 'Frecuencia']).to_excel(
+                writer, sheet_name='Paises', index=False)
+
+        # Hoja 6 — Revistas
+        revistas = resumen.get('tops', {}).get('revistas', [])
+        if revistas:
+            pd.DataFrame(revistas, columns=['Revista', 'Artículos']).to_excel(
+                writer, sheet_name='Top_Revistas', index=False)
+
+        # Hoja 7 — Autor único
+        autor_unico = resumen.get('autor_unico', {}).get('articulos', [])
+        if autor_unico:
+            pd.DataFrame(autor_unico, columns=['Título', 'Autor']).to_excel(
+                writer, sheet_name='Autor_Unico', index=False)
+
+        # Hoja 8 — Dataset completo (por si lo necesitan)
+        df.to_excel(writer, sheet_name='Dataset_Original', index=False)
+
     output.seek(0)
     return output
+#--------------------------------------------------------------------------------------------
 
-def word_descargar(df, titulo = "Reporte de Análisis"):
-    """Crea un documento de Word con una tabla basada en el Dataframe"""
+def word_descargar(df, resumen, titulo="Reporte de Análisis Bibliométrico"):
+    from docx.shared import Pt, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
 
     doc = Document()
     doc.add_heading(titulo, 0)
-    df_preview = df.head(50)
-    table = doc.add_table(rows = 1, cols = len(df_preview.columns))
-    table.style = 'Table Grid'
 
-    hdr_cells = table.rows[0].cells
-    for i, column in enumerate(df_preview.columns):
-        hdr_cells[i].text = str(column)
-    
-    for _, row in df_preview.iterrows():
-        row_cells = table.add_row().cells
-        for i, value in enumerate(row):
-            row_cells[i].text = str(value)
+    # ── Métricas generales ──────────────────────────────────────
+    doc.add_heading('1. Métricas Generales', level=1)
+    m = resumen.get('metricas', {})
+    aa = resumen.get('analisis_avanzado', {})
+
+    tabla_m = doc.add_table(rows=1, cols=2)
+    tabla_m.style = 'Table Grid'
+    tabla_m.rows[0].cells[0].text = 'Métrica'
+    tabla_m.rows[0].cells[1].text = 'Valor'
+
+    metricas_mostrar = [
+        ('Total de artículos',           m.get('total_articulos', '')),
+        ('Artículos con título',          m.get('articulos_validos', '')),
+        ('Artículos sin citas',           m.get('articulos_sin_citas', '')),
+        ('Artículos de autor único',      m.get('total_autor_unico', '')),
+        ('Mínimo de autores/artículo',   m.get('min_autores', '')),
+        ('Máximo de autores/artículo',   m.get('max_autores', '')),
+        ('Promedio de autores/artículo', m.get('promedio_autores', '')),
+        ('Promedio de citas anual',       resumen.get('promedio_citas_anual', '')),
+        ('Rango de años',                aa.get('rango', {}).get('mensaje_formateado', '')),
+    ]
+    for etiqueta, valor in metricas_mostrar:
+        fila = tabla_m.add_row().cells
+        fila[0].text = etiqueta
+        fila[1].text = str(valor)
+
+    doc.add_paragraph()
+
+    # ── Top 10 trabajos más citados ─────────────────────────────
+    doc.add_heading('2. Top 10 Trabajos Más Citados (formato APA)', level=1)
+    citados = resumen.get('tops', {}).get('citados', [])
+    for i, art in enumerate(citados, 1):
+        p = doc.add_paragraph()
+        p.add_run(f"{i}. ").bold = True
+        p.add_run(art.get('apa', art.get('titulo', '')))
+        p.add_run(f"  [{art.get('citas', 0)} citas]").bold = True
+
+    doc.add_paragraph()
+
+    # ── Top 10 autores ──────────────────────────────────────────
+    doc.add_heading('3. Top 10 Autores', level=1)
+    top_autores = aa.get('top_10', [])
+    tabla_a = doc.add_table(rows=1, cols=2)
+    tabla_a.style = 'Table Grid'
+    tabla_a.rows[0].cells[0].text = 'Autor'
+    tabla_a.rows[0].cells[1].text = 'Artículos'
+    for a in top_autores:
+        fila = tabla_a.add_row().cells
+        fila[0].text = str(a.get('autor', ''))
+        fila[1].text = str(a.get('cantidad', ''))
+
+    doc.add_paragraph()
+
+    # ── Universidades ───────────────────────────────────────────
+    doc.add_heading('4. Top 10 Universidades', level=1)
+    univs = resumen.get('Afiliaciones', {}).get('Universidades', [])
+    if univs:
+        tabla_u = doc.add_table(rows=1, cols=2)
+        tabla_u.style = 'Table Grid'
+        tabla_u.rows[0].cells[0].text = 'Universidad'
+        tabla_u.rows[0].cells[1].text = 'Apariciones'
+        for u in univs:
+            fila = tabla_u.add_row().cells
+            fila[0].text = str(u[0])
+            fila[1].text = str(u[1])
+
+    doc.add_paragraph()
+
+    # ── Países ──────────────────────────────────────────────────
+    doc.add_heading('5. Top 10 Países', level=1)
+    paises = resumen.get('tops', {}).get('paises', [])
+    if paises:
+        tabla_p = doc.add_table(rows=1, cols=2)
+        tabla_p.style = 'Table Grid'
+        tabla_p.rows[0].cells[0].text = 'País'
+        tabla_p.rows[0].cells[1].text = 'Apariciones'
+        for p in paises:
+            fila = tabla_p.add_row().cells
+            fila[0].text = str(p[0])
+            fila[1].text = str(p[1])
 
     output = io.BytesIO()
     doc.save(output)
     output.seek(0)
     return output
+
 #--------------------------------------------------------------------------------------------
 def distribucion_documentos(df):
     col_tipo = next(

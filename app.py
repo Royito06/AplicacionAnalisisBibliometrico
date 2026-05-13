@@ -31,6 +31,7 @@ UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 ultimo_df_procesado = None
+ultimo_resumen      = None 
 historial_busquedas = []
 
 # --- Funciones ---    
@@ -341,8 +342,7 @@ def index():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    global ultimo_df_procesado, historial_busquedas
-
+    global ultimo_df_procesado, historial_busquedas, ultimo_resumen
     
     # request.files contiene lo que el usuario subió.
     if 'file' not in request.files:
@@ -395,16 +395,21 @@ def upload_file():
         }
             
         
-            
+        session['proyecto_actual'] = nombre_seguro   
+        rango = src.metrics.obtener_rango_anios(df)
+        anio_min = rango.get("minimo", "N/A")
+        anio_max = rango.get("maximo", "N/A")
+
         registro = {
-            "archivo": file.filename,
-            "fecha": pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
-            "filtro_inicio": anio_inicio if anio_inicio else "N/A",
-            "filtro_fin": anio_fin if anio_fin else "N/A",
-            "registros": len(df)
+            "archivo":       file.filename,
+            "fecha":         pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
+            "filtro_inicio": anio_inicio if anio_inicio else anio_min,
+            "filtro_fin":    anio_fin    if anio_fin    else anio_max,
+            "registros":     len(df)
         }
         historial_busquedas.append(registro)
 
+        ultimo_resumen = resumen
             
         return jsonify(resumen), 200
     except Exception as e:
@@ -517,64 +522,21 @@ def detectar_anomalias():
 # Descargas de archivos(Excel y Word)
 @app.route('/download/excel')
 def descargar_excel():
-    if ultimo_df_procesado is not None:
-        buffer = src.metrics.excel_descargar(ultimo_df_procesado)
+    global ultimo_df_procesado, ultimo_resumen
+    if ultimo_df_procesado is not None and ultimo_resumen is not None:
+        buffer = src.metrics.excel_descargar(ultimo_df_procesado, ultimo_resumen)
         return send_file(buffer, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name='reporte.xlsx')
     return jsonify({"error": "Sin datos"}), 400
 
 @app.route('/download/word')
 def descargar_word():
-    if ultimo_df_procesado is not None:
-        buffer = src.metrics.word_descargar(ultimo_df_procesado, titulo="Reporte Bibliométrico")
+    global ultimo_df_procesado, ultimo_resumen
+    if ultimo_df_procesado is not None and ultimo_resumen is not None:
+        buffer = src.metrics.word_descargar(ultimo_df_procesado, ultimo_resumen)
         return send_file(buffer, mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document', as_attachment=True, download_name='reporte.docx')
     return jsonify({"error": "Sin datos"}), 400
 
-"""
-        return jsonify({"error": "Nombre vacío"}), 400
 
-    # os.path.join une la ruta de la carpeta con el nombre del archivo de forma segura
-    filepath = os.path.join(UPLOAD_FOLDER, file.filename)
-    
-    # Guardamos físicamente el archivo en el disco duro de la computadora.
-    file.save(filepath)
-    
-    # Registramos este archivo como el proyecto activo en la memoria de la sesión
-    session['proyecto_actual'] = file.filename
-    
-    # Llamamos a la función, pasamos la ruta y nos devuelve un DataFrame
-    df = leer_archivo_datos(filepath)
-
-    # Verificamos si el puntero no es null
-    if df is not None:
-        
-        columnas = list(df.columns)
-        total_filas = len(df)
-
-        # Ejecución de todas las métricas
-        resultado_anios = obtener_rango_anios(df)
-        resultado_promedio = calcular_promedio_publicaciones(df)
-        top_10 = obtener_top_10_autores(df)
-        coautorias = contabilizar_coautorias(df)
-        promedio_citas = calcular_promedio_citas(df)
-        proporcion_citas = calcular_proporcion_citadas(df)
-        
-        # jsonify convierte el diccionario de Python en un formato JSON que Dropzone entiende
-        return jsonify ({
-            "mensaje": "Archivo cargado y procesado",
-            "columnas": columnas,
-            "total_registros": total_filas,
-            "rango_anios": resultado_anios,
-            "promedio_autores": resultado_promedio,
-            "top_10_autores": top_10,
-            "coautorias": coautorias,
-            "impacto_citas": promedio_citas,
-            "proporcion_citadas": proporcion_citas
-        }), 200 # Código de éxito HTTP
-        
-    else:
-        # Si la función devolvió None, mandamos un error 500
-        return jsonify({"error": "No se pudo procesar el contenido del archivo"}), 500
-"""
 #-----------------------------------------------------------------------------------------------
 
 @app.route('/top-trabajos')
@@ -617,19 +579,13 @@ def articulos_universidad(nombre_universidad):
 
 @app.route('/paises')
 def lista_paises():
-    proyecto_actual = session.get('proyecto_actual')
-    
-    if not proyecto_actual:
-        return redirect('/proyectos')
-    
-    ruta_archivo = os.path.join(UPLOAD_FOLDER, proyecto_actual)
-    df = src.data_loader.leer_archivo_datos(ruta_archivo)
-    
-    if df is not None:
-        datos_paises = src.metrics.obtener_lista_paises(df)
-        return render_template('paises.html', paises=datos_paises)
-    else:
-        return "Error al leer el archivo de datos."
+    global ultimo_df_procesado
+
+    if ultimo_df_procesado is None:
+        return render_template('paises.html', paises=[])
+
+    datos_paises = src.metrics.obtener_lista_paises(ultimo_df_procesado)
+    return render_template('paises.html', paises=datos_paises)
 
 #-----------------------------------------------------------------------------------------------
 

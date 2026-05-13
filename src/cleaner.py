@@ -22,8 +22,18 @@ def normalizar_nombre(texto):
     nombre = " ".join(nombre.split())
     return nombre.title()
 
+
 def limpiar_dataset(df):
-    """Recorre el DataFrame y normaliza la columna de autores."""
+    df = df.copy()
+    df.columns = [
+        col.encode('utf-8').decode('utf-8-sig').strip().strip('"').strip("'")
+        for col in df.columns
+    ]
+    return df
+
+"""
+def limpiar_dataset(df):
+    #Recorre el DataFrame y normaliza la columna de autores.
     df = df.copy()
     
     df.columns = [
@@ -38,3 +48,4 @@ def limpiar_dataset(df):
             if pd.notna(x) else ""
         )
     return df
+    """

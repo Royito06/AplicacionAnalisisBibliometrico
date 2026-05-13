@@ -15,6 +15,36 @@ html {
     transition-duration: 300ms;
 }
 
+
+.container {
+    margin-bottom: 30px;
+}
+
+/* Estilos para el sistema de pestañas */
+.tabs-container {
+    display: flex;
+    border-bottom: 2px solid #ccc;
+    margin-bottom: 20px;
+    margin-top: 30px;
+}
+
+
+.tab-button:hover {
+    background-color: #ddd;
+}
+
+.tab-button.active {
+    background-color: #007BFF;
+    color: white;
+    font-weight: bold;
+}
+
+
+ul {
+    line-height: 1.8;
+    font-size: 16px;
+}
+
 body {
     min-height: 1000px;
     background: #0f172a;
@@ -23,9 +53,10 @@ body {
     flex-direction: column;
     gap: 24px;
     padding: 24px;
+    font-family: Arial, sans-serif;
 }
 
-.dropzone{
+.dropzone {
     display: flex;
     color: black;
     flex-direction: column;
@@ -33,13 +64,6 @@ body {
     padding: 10px;
 }
 
-header,
-main,
-footer {
-    width: 800px;
-    max-width: 100%;
-    margin: 0 auto;
-}
 
 header {
     display: flex;
@@ -54,107 +78,74 @@ main {
     flex: 1;
 }
 
-footer {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    flex: 1;
+/* Dropzone  */
+#upload-df {
+    width: 700px;
+    max-width: 100%;
+    margin: 0 auto;
+    min-height: 200px;
 }
 
-.plusIcon {
-    font-size: 1.5rem;
+
+/* ── Paneles de resultados con fondo claro ── */
+#resultados,
+#panel-resultados,
+.tab-content {
+    color: #1e293b;
+    outline: none;
     cursor: pointer;
-}
-
-.plusIcon:hover {
-    color: cyan;
-}
-
-#enterTodo {
+    padding: 14px 24px;
+    transition: 0.3s;
+    font-size: 16px;
+    margin-right: 5px;
     display: none;
+    border: 1px solid #ccc;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    background-color: #fafafa;
 }
 
-#enterTodo form {
-    display: flex;
-    align-items: stretch;
-    border: 1px solid skyblue;
-    position: relative;
+/* Tablas */
+#resultados table,
+#panel-resultados table {
+    color: #1e293b;
 }
 
-#enterTodo form:focus-within {
-    border-color: cyan;
+#resultados th,
+#panel-resultados th {
+    color: #1e293b;
+    background: #f1f5f9;
 }
 
-#enterTodo input {
-
-    background: transparent;
-    outline: none;
-    padding: 12px;
-    color: white;
-    flex: 1;
-    border: none;
+#resultados td,
+#panel-resultados td {
+    color: #334155;
 }
 
-#enterTodo button {
-    position: absolute;
-    right: 0;
-    top: 0;
-    height: 100%;
-    background: skyblue;
-    border: none;
-    outline: none;
-    padding: 0 12px;
-    color: #0f172a;
-    font-family: 'Bungee', sans-serif;
-    cursor: pointer;
+/* Sección de idiomas */
+#contenedor-idiomas span {
+    color: #0d47a1 !important;
+    /* ya está en el inline style, esto lo refuerza */
 }
 
-#enterTodo button:hover {
-    background: #0f172a;
-    color: skyblue;
-
+/* Crecimiento anual */
+#lista-crecimiento li {
+    color: #1e293b;
 }
 
-#todos {
-    display: flex;
-    flex-direction: column;
-
+/* Botón cambiar vista */
+#resultados button {
+    color: #007bff;
+    background: white;
 }
 
-.todoItem {
-    display: flex;
-    align-items: center;
+/* Historial */
+#tabla-historial td,
+#tabla-historial th {
+    color: #1e293b;
 }
 
-.todoItem p {
-    flex: 1;
-}
-
-.actions {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    cursor: pointer;
-}
-
-.actions i:hover {
-    color: coral;
-}
-
-footer {
-    display: grid;
-    place-items: center;
-}
-
-footer a {
-    color: inherit;
-
-}
-
-footer i {
-    cursor: pointer;
-}
-
-footer i:hover {
-    color: cyan;
+/* Links dentro de paneles */
+#panel-resultados a {
+    color: #007bff;
 }
