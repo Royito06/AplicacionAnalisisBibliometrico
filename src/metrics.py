@@ -105,7 +105,8 @@ def obtener_top_10_autores(df):
         .explode()
         .str.strip()
     )
-
+    
+    
     autores_individuales = autores_individuales[autores_individuales != ""]
 
     top_10_serie = autores_individuales.value_counts().head(10)
@@ -355,13 +356,7 @@ def calcular_proporcion_citadas(df):
     Calcula el porcentaje de publicaciones que tienen al menos 1 cita.
     (Proporción de Publicaciones Citadas - PCP)
     """
-    posibles_citas = ['Citas', 'TC', 'Times Cited', 'Citations']
-    col_citas = None
-    
-    for col in df.columns:
-        if col in posibles_citas:
-            col_citas = col
-            break
+    col_citas = next((c for c in df.columns if 'cite' in c.lower() or 'cit' in c.lower()), None)
             
     if col_citas is None:
         return {"error": "No se encontró la columna de Citas en el dataset."}
@@ -602,8 +597,8 @@ def word_descargar(df, resumen, titulo="Reporte de Análisis Bibliométrico"):
         tabla_p.rows[0].cells[1].text = 'Apariciones'
         for p in paises:
             fila = tabla_p.add_row().cells
-            fila[0].text = str(p[0])
-            fila[1].text = str(p[1])
+            fila[0].text = str(p.get('pais', ''))
+            fila[1].text = str(p.get('cantidad', ''))
 
     output = io.BytesIO()
     doc.save(output)

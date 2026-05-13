@@ -34,18 +34,21 @@
         <div id="panel-resultados" style="display: none;">
 
             <h2>Resultados del Análisis</h2>
-            
+
+
             <!-- Botones de las Pestañas -->
             <div class="tabs-container">
                 <button class="tab-button active" onclick="abrirCategoria(event, 'categoriaA')"> Categoría A:
                     Publicación</button>
                 <button class="tab-button" onclick="abrirCategoria(event, 'categoriaB')"> Categoría B: Citas</button>
             </div>
-        
+
             <!-- CAJA DE CATEGORÍA A -->
             <div id="categoriaA" class="tab-content" style="display: block;">
                 <h3>Métricas de Publicación</h3>
                 <ul>
+                    <li>Total de artículos importados: <b><span id="res_total_articulos"></span></b></li>
+                    <li>Publicaciones con un solo autor: <b><span id="res_autor_unico"></span></b></li>
                     <li>Rango de años activos: <b><span id="res_nay"></span></b></li>
                     <li>Promedio de publicaciones por autor: <b><span id="res_prom_autores"></span></b></li>
                     <li>Coautorías: <b><span id="res_coautorias"></span></b></li>
@@ -69,7 +72,7 @@
             </div>
 
         </div>
-        
+
 
         <section id="resultados"
             style="display:none; margin: 20px auto; max-width: 1000px; padding: 20px; border: 1px solid #ccc; border-radius: 8px; background: white;">
@@ -134,6 +137,16 @@
                     style="text-decoration:none; background:#007bff; color:white; padding:12px 25px; border-radius:5px; font-weight: bold;">
                     <i class="fa-solid fa-file-word"></i> Exportar Word
                 </a>
+
+                <a href="/exportar/top_autores"
+                    style="text-decoration:none; background:#287ba7; color:white; padding:12px 25px; border-radius:5px; font-weight: bold;">
+                    </i>⬇ Top Autores (CSV)</a>
+                <a href="/exportar/top_trabajos" style="text-decoration:none; background:#287ba7; color:white;
+                    padding:12px 25px; border-radius:5px; font-weight: bold;">
+                    </i>⬇ Top Trabajos (CSV)</a>
+                <a href="/exportar/paises" style="text-decoration:none; background:#287ba7; color:white; padding:12px
+                    25px; border-radius:5px; font-weight: bold;">
+                    </i>⬇ Países (CSV)</a>
             </div>
 
             <!-- 6. Historial -->
@@ -183,6 +196,15 @@
                 this.on("success", function (file, response) {
                     document.getElementById('resultados').style.display = 'block';
                     document.getElementById('panel-resultados').style.display = 'block';
+
+                    //También agregamos para autor unico
+                    if (response.autor_unico?.total !== undefined)
+                        document.getElementById('res_autor_unico').innerText = response.autor_unico.total;
+
+                    //Se agrego total de articulos
+                    if (response.metricas?.total_articulos !== undefined)
+                        document.getElementById('res_total_articulos').innerText =
+                            response.metricas.total_articulos;
 
                     // 1. Nube de palabras
                     if (response.wordcloud) {
