@@ -24,6 +24,7 @@
                     <th>Posición</th>
                     <th>Título del Artículo</th>
                     <th>Total de Citas</th>
+                    <th>Referencia APA</th>
                 </tr>
             </thead>
             <tbody>
@@ -38,6 +39,7 @@
                     </td>
                     
                     <td>{{ trabajo.citas }}</td>
+                    <td style="font-size:0.85em; color:#333;">{{ trabajo.apa }}</td>
                 </tr>
                 {% endfor %}
             </tbody>

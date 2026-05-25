@@ -82,6 +82,40 @@ def calcular_promedio_publicaciones(df):
 
 #--------------------------------------------------------------------------------------------
 
+def formatear_apa(fila, col_revista, col_volumen, col_numero, col_paginas):
+    autores_sin_formato = str(fila.get('Authors', ''))
+    autores_lista = [ a.strip() for a in autores_sin_formato.split(';') if a.strip()]
+    if len(autores_lista) == 1:
+        autores_apa = autores_lista[0]
+    elif len(autores_lista)>1:
+        autores_apa = ', '.join(autores_lista[:-1])+ ', & ' + autores_lista[-1]
+    else:
+        autores_apa = 'Autor desconocido'
+        
+    anio     = str(fila.get('Year',         ''))
+    titulo   = str(fila.get('Title',        ''))
+    revista  = str(fila.get(col_revista,    '')) if col_revista else ''
+    volumen  = str(fila.get(col_volumen,    '')) if col_volumen else ''
+    numero   = str(fila.get(col_numero,     '')) if col_numero  else ''
+    paginas  = str(fila.get(col_paginas,    '')) if col_paginas else ''
+    
+    # Construir progresivamente — solo agrega lo que existe
+    ref = f"{autores_apa}. ({anio}). {titulo}."
+    if revista:
+        ref += f" {revista}"
+        if volumen:
+            ref += f", {volumen}"
+            if numero:
+                ref += f"({numero})"
+        if paginas:
+            ref += f", {paginas}"
+        ref += "."
+
+    return ref
+
+
+#--------------------------------------------------------------------------------------------
+
 def obtener_top_10_autores(df):
     df = df.copy()
     posibles_nombres = ['Autor', 'Autores', 'Author', 'Authors', 'AU']
@@ -119,33 +153,27 @@ def obtener_top_10_trabajos(df):
     """
     Ordena los trabajos por número de citas y da el top 10
     """
-    
-    col_citas = None
-    col_titulo = None
-    
-    # Buscamos citas y títulos
-    col_citas  = next((c for c in df.columns if 'cite' in c.lower() or 'cita' in c.lower()), None)
-    col_titulo = next((c for c in df.columns if 'titl' in c.lower()), None)
-    
+    col_citas   = next((c for c in df.columns if 'cite' in c.lower()), None)
+    col_titulo  = next((c for c in df.columns if 'titl' in c.lower()), None)
+    col_revista = next((c for c in df.columns if 'source' in c.lower() or 'journal' in c.lower()), None)
+    col_volumen = next((c for c in df.columns if c.lower() in ('volume', 'vol')), None)
+    col_numero  = next((c for c in df.columns if c.lower() in ('issue', 'number')), None)
+    col_paginas = next((c for c in df.columns if 'page' in c.lower()), None)
 
     if not col_citas or not col_titulo:
-        return [] #Vacío si el archivo no tiene estas columnas
-        
-    # forzamos conversion de citas a numeros
+        return []
+
     df[col_citas] = pd.to_numeric(df[col_citas], errors='coerce').fillna(0)
-    
-    # Ordenamos de mayor a menor y tomamos top 10
     top_10 = df.sort_values(by=col_citas, ascending=False).head(10)
-    
+
     resultados = []
-    for indice, fila in top_10.iterrows():
+    for _, fila in top_10.iterrows():
         resultados.append({
             "titulo": fila[col_titulo],
-            "citas": int(fila[col_citas])
+            "citas":  int(fila[col_citas]),
+            "apa":    formatear_apa(fila, col_revista, col_volumen, col_numero, col_paginas)
         })
-        
     return resultados
-
 #--------------------------------------------------------------------------------------------
 
 def contabilizar_coautorias(df):
