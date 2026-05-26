@@ -35,6 +35,41 @@ ultimo_resumen      = None
 historial_busquedas = []
 
 # --- Funciones ---    
+
+#cambio de última hora
+
+# En app.py — agregar import al inicio
+import json
+
+# Constante junto a UPLOAD_FOLDER
+CONFIG_FILE = 'user_settings.json'
+
+# Función auxiliar antes de procesar_bibliometria
+def guardar_configuracion(filtros, metricas):
+    config = {
+        "filtros_activos":        filtros,
+        "metricas_seleccionadas": metricas,
+        "ultima_actualizacion":   datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(config, f, indent=4)
+    return {"status": "success", "message": "Configuración guardada"}
+
+# Ruta — agregar junto a las demás rutas
+@app.route('/save_settings', methods=['POST'])
+def save_settings():
+    datos = request.json
+    if not datos:
+        return jsonify({"status": "error", "message": "No se recibieron datos"}), 400
+    resultado = guardar_configuracion(datos.get('filtros'), datos.get('metricas'))
+    return jsonify(resultado)
+
+
+
+
+
+
+# ---------------------
 def es_autor_unico(valor):
         partes = [p.strip() for p in valor.split(';') if p.strip()]
         if len(partes) > 1:

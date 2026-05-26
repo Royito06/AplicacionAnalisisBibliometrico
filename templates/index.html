@@ -58,6 +58,18 @@
                     <li><a href="/proyectos" target="_blank">Ver Gestor de Proyectos (Sesiones)</a></li>
                 </ul>
             </div>
+            <div style="margin-top: 20px;">
+                <h3><i class="fa-solid fa-university"></i> Top 10 Universidades</h3>
+                <table style="width:100%; border-collapse: collapse;" id="tabla-universidades">
+                    <thead>
+                        <tr style="background: #f4f4f4;">
+                            <th style="padding: 10px; border: 1px solid #ddd;">Institución</th>
+                            <th style="padding: 10px; border: 1px solid #ddd;">Artículos</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cuerpo-universidades"></tbody>
+                </table>
+            </div>
 
             <!-- CAJA DE CATEGORÍA B -->
             <div id="categoriaB" class="tab-content" style="display: none;">
@@ -99,7 +111,10 @@
                     <div
                         style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                         <h2><i class="fa-solid fa-users"></i> Top 10 Autores</h2>
-
+                        <button onclick="alternarVistaTop10()"
+                            style="padding: 6px 12px; cursor: pointer; border-radius: 20px; border: 1px solid #007bff; background: white; color: #007bff; font-weight: bold;">
+                            <i class="fa-solid fa-right-left"></i> Cambiar Vista
+                        </button>
                     </div>
 
                     <div id="vista-tabla-autores">
@@ -116,7 +131,7 @@
 
                     <div id="vista-grafico-autores"
                         style="display: none; background: #fff; padding: 10px; border: 1px solid #eee;">
-                        <canvas id="chartAutores"></canvas>
+                        <canvas id="chartAutores" height="300"></canvas>
                     </div>
                 </div>
 
@@ -129,6 +144,12 @@
 
             <!-- 5. Descargas -->
             <div style="margin: 40px 0; display: flex; gap: 15px; justify-content: center;">
+                <!--Cambio de ultimo momento historia Luis-->
+                <button onclick="guardarConfig()"
+                    style="padding:12px 25px; background:#6c757d; color:white; border:none; border-radius:5px; cursor:pointer; font-weight:bold;">
+                    <i class="fa-solid fa-floppy-disk"></i> Guardar Configuración
+                </button>
+
                 <a href="/download/excel"
                     style="text-decoration:none; background:#28a745; color:white; padding:12px 25px; border-radius:5px; font-weight: bold;">
                     <i class="fa-solid fa-file-excel"></i> Exportar Excel
@@ -179,6 +200,7 @@
             } else {
                 tabla.style.display = "none";
                 grafico.style.display = "block";
+                if (miChartAutores) miChartAutores.resize();
             }
         }
 
@@ -196,6 +218,34 @@
                 this.on("success", function (file, response) {
                     document.getElementById('resultados').style.display = 'block';
                     document.getElementById('panel-resultados').style.display = 'block';
+
+
+                    if (response.Afiliaciones && response.Afiliaciones.Universidades) {
+                        const cuerpoUniv = document.getElementById('cuerpo-universidades');
+                        cuerpoUniv.innerHTML = "";
+                        response.Afiliaciones.Universidades.forEach(u => {
+                            const nombre = u[0];
+                            const cantidad = u[1];
+                            if (nombre === 'Afiliación Desconocida') {
+                                cuerpoUniv.innerHTML += `
+                <tr>
+                    <td style="padding:8px; border:1px solid #ddd; color:#999;">${nombre}</td>
+                    <td style="padding:8px; border:1px solid #ddd; text-align:center;">${cantidad}</td>
+                </tr>`;
+                            } else {
+                                cuerpoUniv.innerHTML += `
+                <tr>
+                    <td style="padding:8px; border:1px solid #ddd;">
+                        <a href="/universidad/${encodeURIComponent(nombre)}"
+                           style="color:#0056b3; text-decoration:none; font-weight:bold;">
+                            ${nombre}
+                        </a>
+                    </td>
+                    <td style="padding:8px; border:1px solid #ddd; text-align:center;">${cantidad}</td>
+                </tr>`;
+                            }
+                        });
+                    }
 
                     //También agregamos para autor unico
                     if (response.autor_unico?.total !== undefined)
@@ -317,6 +367,26 @@
             // Mostramos la caja seleccionada y resaltamos el botón presionado
             document.getElementById(idCategoria).style.display = "block";
             evento.currentTarget.className += " active";
+        }
+
+        //Cambio de la historia 34 Luis
+        function guardarConfig() {
+            const config = {
+                filtros: {
+                    anio_inicio: document.getElementById('anio_inicio')?.value || null,
+                    anio_fin: document.getElementById('anio_fin')?.value || null
+                },
+                metricas: ["top_autores", "top_universidades", "top_paises", "citas_anuales"]
+            };
+
+            fetch('/save_settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+            })
+                .then(res => res.json())
+                .then(data => alert(data.message))
+                .catch(err => alert('Error al guardar: ' + err));
         }
     </script>
 

@@ -196,7 +196,7 @@ def contabilizar_coautorias(df):
     total_publicaciones = len(df_limpio)
     
     # Separamos el texto de los autores en arreglos
-    listas_de_autores = df_limpio[col_autor].astype(str).str.replace(';', ',').str.split(',')
+    listas_de_autores = df_limpio[col_autor].astype(str).str.split(';')
     
     # Cuenta cuántas listas tienen más de 1 autor válido, cada lista y devuelve true si hay más de 1 autor/elemento
     es_coautorado = listas_de_autores.apply(lambda autores: len([a for a in autores if a.strip()]) > 1)
@@ -235,7 +235,7 @@ def obtener_articulos_por_universidad(df, nombre_universidad):
     df_limpio = df.dropna(subset=[col_afil])
     
     # Aplicamos el filtro para ignorar mayúsculas y minúsculas
-    filtro = df_limpio[col_afil].str.contains(nombre_universidad, case=False, na=False)
+    filtro = df_limpio[col_afil].astype(str).str.contains(nombre_universidad, case=False, na=False)
     df_filtrado = df_limpio[filtro]
     
     resultados = []
