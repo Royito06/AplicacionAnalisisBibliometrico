@@ -85,6 +85,32 @@
 
         </div>
 
+        <div style="margin-top: 30px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #fafafa;">
+            <h3><i class="fa-solid fa-magnifying-glass"></i> Filtros Combinados</h3>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
+                <div>
+                    <label>Autor</label><br>
+                    <input id="filtro-autor" type="text" placeholder="Ej. García"
+                        style="padding:6px; border:1px solid #ccc; border-radius:4px;">
+                </div>
+                <div>
+                    <label>Año</label><br>
+                    <input id="filtro-anio" type="text" placeholder="Ej. 2023"
+                        style="padding:6px; border:1px solid #ccc; border-radius:4px; width:80px;">
+                </div>
+                <div>
+                    <label>País</label><br>
+                    <input id="filtro-pais" type="text" placeholder="Ej. Mexico"
+                        style="padding:6px; border:1px solid #ccc; border-radius:4px;">
+                </div>
+                <button onclick="aplicarFiltros()"
+                    style="padding:8px 16px; background:#007bff; color:white; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">
+                    <i class="fa-solid fa-filter"></i> Buscar
+                </button>
+            </div>
+            <div id="resultados-filtro" style="margin-top:15px;"></div>
+        </div>
+
 
         <section id="resultados"
             style="display:none; margin: 20px auto; max-width: 1000px; padding: 20px; border: 1px solid #ccc; border-radius: 8px; background: white;">
@@ -388,6 +414,59 @@
                 .then(data => alert(data.message))
                 .catch(err => alert('Error al guardar: ' + err));
         }
+
+        function aplicarFiltros() {
+            const filtros = {};
+            const autor = document.getElementById('filtro-autor').value.trim();
+            const anio = document.getElementById('filtro-anio').value.trim();
+            const pais = document.getElementById('filtro-pais').value.trim();
+
+            if (autor) filtros['Authors'] = autor;
+            if (anio) filtros['Year'] = anio;
+            if (pais) filtros['Affiliations'] = pais;
+
+            if (Object.keys(filtros).length === 0) {
+                alert('Ingresa al menos un filtro.');
+                return;
+            }
+
+            fetch('/buscar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(filtros)
+            })
+                .then(res => res.json())
+                .then(data => {
+                    const div = document.getElementById('resultados-filtro');
+                    if (data.status !== 'success') {
+                        div.innerHTML = `<p style="color:red;">${data.message}</p>`;
+                        return;
+                    }
+                    if (data.resultados_encontrados === 0) {
+                        div.innerHTML = '<p style="color:#888;">No se encontraron resultados.</p>';
+                        return;
+                    }
+                    let html = `<p><b>${data.resultados_encontrados} resultado(s) encontrado(s):</b></p>
+                    <table style="width:100%; border-collapse:collapse; font-size:0.85em;">
+                        <thead><tr style="background:#f4f4f4;">
+                            <th style="padding:8px; border:1px solid #ddd;">Título</th>
+                            <th style="padding:8px; border:1px solid #ddd;">Autores</th>
+                            <th style="padding:8px; border:1px solid #ddd;">Año</th>
+                        </tr></thead><tbody>`;
+                    data.datos.forEach(r => {
+                        html += `<tr>
+                <td style="padding:8px; border:1px solid #ddd;">${r.Title || ''}</td>
+                <td style="padding:8px; border:1px solid #ddd;">${r.Authors || ''}</td>
+                <td style="padding:8px; border:1px solid #ddd; text-align:center;">${r.Year || ''}</td>
+            </tr>`;
+                    });
+                    html += '</tbody></table>';
+                    div.innerHTML = html;
+                })
+                .catch(err => alert('Error: ' + err));
+        }
+
+
     </script>
 
 </html>
