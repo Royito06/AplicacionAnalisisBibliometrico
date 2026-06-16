@@ -1,0 +1,13 @@
+{
+    "filtros_activos": {
+        "anio_inicio": null,
+        "anio_fin": null
+    },
+    "metricas_seleccionadas": [
+        "top_autores",
+        "top_universidades",
+        "top_paises",
+        "citas_anuales"
+    ],
+    "ultima_actualizacion": "2026-06-15 09:02:45"
+}

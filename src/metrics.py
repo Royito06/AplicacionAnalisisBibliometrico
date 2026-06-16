@@ -118,13 +118,10 @@ def formatear_apa(fila, col_revista, col_volumen, col_numero, col_paginas):
 
 def obtener_top_10_autores(df):
     df = df.copy()
-    posibles_nombres = ['Autor', 'Autores', 'Author', 'Authors', 'AU']
-    col_autor = None
-
-    for col in df.columns:
-        if col in posibles_nombres:
-            col_autor = col
-            break
+    col_autor = next(
+        (c for c in df.columns if c.lower() in ('autor', 'autores', 'author', 'authors', 'au')),
+        None
+    )
 
     if col_autor is None:
         return []
