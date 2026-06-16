@@ -112,10 +112,14 @@ def formatear_apa(fila, col_revista, col_volumen, col_numero, col_paginas):
   
 
 def generar_wordcloud(df):
-    if 'Title' not in df.columns or df['Title'].empty:
+    col_titulo = next(
+        (c for c in df.columns if c.lower() in ('title', 'article title', 'título', 'ti')),
+        None
+    )
+    if col_titulo is None or df[col_titulo].dropna().empty:
         return None
-    try: 
-        texto = " ".join(titulo for titulo in df['Title'].astype(str))
+    try:
+        texto = " ".join(df[col_titulo].dropna().astype(str))
         wc = WordCloud(width=800, height=400, background_color='white').generate(texto)
         img = io.BytesIO()
         plt.figure(figsize=(10, 5))
@@ -127,7 +131,7 @@ def generar_wordcloud(df):
         return base64.b64encode(img.getvalue()).decode()
     except Exception as e:
         print(f"Error generando wordcloud: {e}")
-        return None   # ← no propagar el error
+        return None
 
 def procesar_bibliometria(df, nombre_archivo):
     if df is None or df.empty:
@@ -138,7 +142,7 @@ def procesar_bibliometria(df, nombre_archivo):
     
     df.columns = df.columns.str.strip()
 
-    print("Columnas detectadas:", df.columns.tolist())
+    ###Borrar este comentario
 
     #  Mapear nombres comunes (WoS/Scopus/etc)
     mapa_columnas = {
@@ -170,7 +174,7 @@ def procesar_bibliometria(df, nombre_archivo):
     registros_con_titulo = int(df['Title'].dropna().count()) if 'Title' in df.columns else 0
     libros_resumen = df['Title'].dropna().head(20).tolist() if 'Title' in df.columns else []
 
-    print("Ejemplo títulos:", libros_resumen[:3])
+    ###Borrar este comentario
 
     # ---------------- AUTORES ----------------
     autores_resumen = df['Authors'].dropna().head(20).tolist() if 'Authors' in df.columns else []

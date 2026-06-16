@@ -297,10 +297,16 @@ def obtener_lista_paises(df):
 
     # --- Paso 2: extraer de Affiliations (Scopus) ---
     # Scopus usa "Affiliations" — buscar con nombre limpio
+    ## Arreglado para no tener errores al introducir archivos de WoS, "fallback" con address
     col_afil = next(
-        (c for c in df.columns if 'affil' in c.lower()),
+        (c for c in df.columns if 'affil' in c.lower() and not df[c].dropna().empty),
         None
     )
+    if col_afil is None:
+        col_afil = next(
+            (c for c in df.columns if 'address' in c.lower() and not df[c].dropna().empty),
+            None
+        )
     if col_afil is None:
         return []
 
