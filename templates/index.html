@@ -240,8 +240,8 @@
             maxFilesize: 20,
             acceptedFiles: ".csv, .xls, .xlsx",
             dictDefaultMessage: "Arrastra archivos aquí o haz clic para analizar",
-            addRemoveLinks : True,
-            dictRemoveFile : "Eliminar",
+            addRemoveLinks: true,
+            dictRemoveFile: "Eliminar",
             init: function () {
                 this.on("success", function (file, response) {
                     document.getElementById('resultados').style.display = 'block';
@@ -383,6 +383,10 @@
                 this.on("error", function (file, message) {
                     console.error("Error del servidor:", message);
                     alert("Error al procesar: " + (message.message || message));
+                });
+                this.on("removedfile", function (file) {
+                    document.getElementById('resultados').style.display = 'none';
+                    document.getElementById('panel-resultados').style.display = 'none';
                 });
             }
 
