@@ -44,13 +44,10 @@ def calcular_promedio_publicaciones(df):
     Calcula el promedio de publicaciones por autor dividiendo 
     el total de artículos entre el número de autores únicos.
     """
-    posibles_nombres = ['Autor', 'Autores', 'Author', 'Authors', 'AU']
-    col_autor = None
-    
-    for col in df.columns:
-        if col in posibles_nombres:
-            col_autor = col
-            break
+    col_autor = next(
+        (c for c in df.columns if c.lower().strip() in ('autor', 'autores', 'author', 'authors', 'au')),
+        None
+    )
             
     if col_autor is None:
         return {"error": "No se encontró la columna de Autores en el dataset."}

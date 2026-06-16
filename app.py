@@ -16,6 +16,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
+from src.metrics import formatear_apa
 
 
 app = Flask(__name__)
@@ -79,36 +80,7 @@ def es_autor_unico(valor):
         # si no hay ; revisa por comas (formato Scopus)
         return len([p for p in valor.split(',') if p.strip()]) <= 2
 
-def formatear_apa(fila, col_revista, col_volumen, col_numero, col_paginas):
-    autores_sin_formato = str(fila.get('Authors', ''))
-    autores_lista = [ a.strip() for a in autores_sin_formato.split(';') if a.strip()]
-    if len(autores_lista) == 1:
-        autores_apa = autores_lista[0]
-    elif len(autores_lista)>1:
-        autores_apa = ', '.join(autores_lista[:-1])+ ', & ' + autores_lista[-1]
-    else:
-        autores_apa = 'Autor desconocido'
-        
-    anio     = str(fila.get('Year',         ''))
-    titulo   = str(fila.get('Title',        ''))
-    revista  = str(fila.get(col_revista,    '')) if col_revista else ''
-    volumen  = str(fila.get(col_volumen,    '')) if col_volumen else ''
-    numero   = str(fila.get(col_numero,     '')) if col_numero  else ''
-    paginas  = str(fila.get(col_paginas,    '')) if col_paginas else ''
-    
-    # Construir progresivamente — solo agrega lo que existe
-    ref = f"{autores_apa}. ({anio}). {titulo}."
-    if revista:
-        ref += f" {revista}"
-        if volumen:
-            ref += f", {volumen}"
-            if numero:
-                ref += f"({numero})"
-        if paginas:
-            ref += f", {paginas}"
-        ref += "."
 
-    return ref
   
 
 def generar_wordcloud(df):
@@ -430,7 +402,10 @@ def upload_file():
         "idiomas": src.metrics.distribucion_idiomas(df),
         "coautorias":         src.metrics.contabilizar_coautorias(df),
         "impacto_citas":      src.metrics.calcular_promedio_citas(df),
-        "proporcion_citadas": src.metrics.calcular_proporcion_citadas(df)
+        "proporcion_citadas": src.metrics.calcular_proporcion_citadas(df),
+        "h_index":            src.metrics.calcular_h_index(df),          # ← NUEVO
+        "distribucion_docs":  src.metrics.distribucion_documentos(df),   # ← NUEVO
+        "tendencias":         src.metrics.identificar_tendencias(df), 
         }
             
         
@@ -450,6 +425,8 @@ def upload_file():
 
         ultimo_resumen = resumen
             
+        resumen['tops']['paises'] = src.metrics.obtener_lista_paises(df)
+
         return jsonify(resumen), 200
     except Exception as e:
             print(f"Error en upload: {str(e)}")
@@ -518,6 +495,26 @@ def identificar_conectores():
         }), 200
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/actualizar', methods=['POST'])
+def actualizar():
+    global ultimo_df_procesado
+    if ultimo_df_procesado is None:
+        return jsonify({"error": "No hay datos base cargados"}), 400
+    file = request.files.get('file')
+    if not file:
+        return jsonify({"error": "No se envió archivo"}), 400
+    nombre_seguro = secure_filename(file.filename)
+    filepath = os.path.join(UPLOAD_FOLDER, nombre_seguro)
+    file.save(filepath)
+    df_nuevo = src.data_loader.leer_archivo_datos(filepath)
+    if df_nuevo is None:
+        return jsonify({"error": "Archivo inválido"}), 400
+    df_nuevo = src.cleaner.limpiar_dataset(df_nuevo)
+    ultimo_df_procesado = actualizar_dataset(ultimo_df_procesado, df_nuevo)
+    return jsonify({"status": "ok", "registros_totales": len(ultimo_df_procesado)}), 200
+
 
 @app.route('/analisis/anomalias', methods=['GET'])
 def detectar_anomalias():
