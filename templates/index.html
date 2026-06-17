@@ -96,35 +96,38 @@
 
         </div>
 
-        <div style="margin-top: 30px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #fafafa;">
-            <h3 style="color: #000000"><i class="fa-solid fa-magnifying-glass"></i> Filtros Combinados</h3>
-            <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
-                <div>
-                    <label>Autor</label><br>
-                    <input id="filtro-autor" type="text" placeholder="Ej. García"
-                        style="padding:6px; border:1px solid #ccc; border-radius:4px;">
-                </div>
-                <div>
-                    <label>Año</label><br>
-                    <input id="filtro-anio" type="text" placeholder="Ej. 2023"
-                        style="padding:6px; border:1px solid #ccc; border-radius:4px; width:80px;">
-                </div>
-                <div>
-                    <label>País</label><br>
-                    <input id="filtro-pais" type="text" placeholder="Ej. Mexico"
-                        style="padding:6px; border:1px solid #ccc; border-radius:4px;">
-                </div>
-                <button onclick="aplicarFiltros()"
-                    style="padding:8px 16px; background:#007bff; color:white; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">
-                    <i class="fa-solid fa-filter"></i> Buscar
-                </button>
-            </div>
-            <div id="resultados-filtro" style="margin-top:15px;"></div>
-        </div>
 
 
         <section id="resultados"
             style="display:none; margin: 20px auto; max-width: 1000px; padding: 20px; border: 1px solid #ccc; border-radius: 8px; background: white;">
+
+            <!-- Filtros combinados -->
+            <div
+                style="margin-top: 30px; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #fafafa;">
+                <h3 style="color: #000000"><i class="fa-solid fa-magnifying-glass"></i> Filtros Combinados</h3>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
+                    <div>
+                        <label>Autor</label><br>
+                        <input id="filtro-autor" type="text" placeholder="Ej. García"
+                            style="padding:6px; border:1px solid #ccc; border-radius:4px;">
+                    </div>
+                    <div>
+                        <label>Año</label><br>
+                        <input id="filtro-anio" type="text" placeholder="Ej. 2023"
+                            style="padding:6px; border:1px solid #ccc; border-radius:4px; width:80px;">
+                    </div>
+                    <div>
+                        <label>País</label><br>
+                        <input id="filtro-pais" type="text" placeholder="Ej. Mexico"
+                            style="padding:6px; border:1px solid #ccc; border-radius:4px;">
+                    </div>
+                    <button onclick="aplicarFiltros()"
+                        style="padding:8px 16px; background:#007bff; color:white; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">
+                        <i class="fa-solid fa-filter"></i> Buscar
+                    </button>
+                </div>
+                <div id="resultados-filtro" style="margin-top:15px;"></div>
+            </div>
 
             <!-- 1. Nube de Palabras -->
             <div style="text-align: center; margin-bottom: 30px;">
@@ -240,7 +243,7 @@
                         <thead>
                             <tr style="background:#f4f4f4;">
                                 <th style="padding:8px; border:1px solid #ddd;">Autor</th>
-                                <th style="padding:8px; border:1px solid #ddd;">Publicaciones</th>
+                                <th style="padding:8px; border:1px solid #ddd;">Colaboraciones</th>
                             </tr>
                         </thead>
                         <tbody id="cuerpo-conectores"></tbody>
@@ -540,10 +543,10 @@
                             if (data.status === 'success') {
                                 const cuerpo = document.getElementById('cuerpo-conectores');
                                 cuerpo.innerHTML = '';
-                                Object.entries(data.data).forEach(([autor, cantidad]) => {
+                                Object.entries(data.data).forEach(([autor, publicaciones]) => {
                                     cuerpo.innerHTML += `<tr>
                                         <td style="padding:8px; border:1px solid #ddd;">${autor}</td>
-                                        <td style="padding:8px; border:1px solid #ddd; text-align:center;">${cantidad}</td>
+                                        <td style="padding:8px; border:1px solid #ddd; text-align:center;">${publicaciones}</td>
                                     </tr>`;
                                 });
                             }
@@ -581,7 +584,19 @@
                                 new vis.Network(container, { nodes, edges }, {
                                     nodes: { shape: 'dot', scaling: { min: 10, max: 30 } },
                                     edges: { scaling: { min: 1, max: 5 } },
-                                    physics: { stabilization: true }
+                                    physics: {
+                                        enabled: true,
+                                        iterations: 1,
+                                        updateInterval: 25
+                                    },
+                                    barnesHut: {
+                                        gravitationalConstant: -3000,
+                                        springLength: 120,
+                                        damping: 0.5
+                                    }
+                                });
+                                red.on("stabilizationIterationsDone", function () {
+                                    red.setOptions({ physics: false });
                                 });
                             }
                         });

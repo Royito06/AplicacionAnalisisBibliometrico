@@ -194,7 +194,7 @@ def procesar_bibliometria(df, nombre_archivo):
 
     # ---------------- TOPS ----------------
     col_revista = next((c for c in df.columns if 'source' in c.lower() or 'journal' in c.lower()), None)
-    col_citas = next((c for c in df.columns if 'cite' in c.lower()), None)
+    col_citas = src.metrics.obtener_columna_citas(df)
     col_ciudad = next((c for c in df.columns if 'city' in c.lower()), None)
     col_volumen = next((c for c in df.columns if c.lower() in ('volume', 'vol')), None)
     col_numero  = next((c for c in df.columns if c.lower() in ('issue', 'number')), None)
@@ -567,7 +567,7 @@ def detectar_anomalias():
 
     try:
         df = ultimo_df_procesado.copy()
-        col_citas = next((c for c in df.columns if 'cite' in c.lower()), None)  # ← detecta la columna dinámicamente
+        col_citas = src.metrics.obtener_columna_citas(df)
 
         if col_citas is None:
             return jsonify({"status": "error", "message": "No se encontró columna de citas"}), 400
@@ -582,8 +582,8 @@ def detectar_anomalias():
 
         exitos = df[serie_citas > limite_superior]
 
-        col_titulo = 'Title'   if 'Title'   in df.columns else None
-        col_autor  = 'Authors' if 'Authors' in df.columns else None
+        col_titulo = next((c for c in df.columns if c.lower() in ('title', 'article title', 'título', 'ti')),None)
+        col_autor  = next((c for c in df.columns if c.lower() in ('authors', 'author', 'au')),None) 
 
         cols = [c for c in [col_titulo, col_autor, col_citas] if c]  # solo columnas que existen
         return jsonify({

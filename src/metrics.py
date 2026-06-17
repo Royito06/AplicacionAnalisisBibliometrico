@@ -8,6 +8,25 @@ import networkx as nx
 
 #--------------------------------------------------------------------------------------------
 
+def obtener_columna_citas(df):
+
+    prioridades = [
+        "Cited by",
+        "Times Cited, WoS Core",
+        "Times Cited, All Databases",
+        "Times Cited",
+        "TC",
+        "Citation Count"
+    ]
+
+    for nombre in prioridades:
+        for col in df.columns:
+            if col.strip().lower() == nombre.lower():
+                return col
+
+    return None
+
+#--------------------------------------------------------------------------------------------
 def obtener_rango_anios(df):
     """
     Busca la columna de años en el DataFrame y devuelve el año más antiguo y el más reciente.
@@ -147,7 +166,7 @@ def obtener_top_10_trabajos(df):
     """
     Ordena los trabajos por número de citas y da el top 10
     """
-    col_citas   = next((c for c in df.columns if 'cite' in c.lower()), None)
+    col_citas = obtener_columna_citas(df)
     col_titulo  = next((c for c in df.columns if 'titl' in c.lower()), None)
     col_revista = next((c for c in df.columns if 'source' in c.lower() or 'journal' in c.lower()), None)
     col_volumen = next((c for c in df.columns if c.lower() in ('volume', 'vol')), None)
@@ -249,7 +268,7 @@ def calcular_promedio_citas(df):
     y dividiéndolas entre el total de publicaciones.
     """
     col_citas = None    
-    col_citas = next((c for c in df.columns if 'cite' in c.lower() or 'cit' in c.lower()), None)
+    col_citas = obtener_columna_citas(df)
 
     
 
@@ -384,7 +403,7 @@ def calcular_proporcion_citadas(df):
     Calcula el porcentaje de publicaciones que tienen al menos 1 cita.
     (Proporción de Publicaciones Citadas - PCP)
     """
-    col_citas = next((c for c in df.columns if 'cite' in c.lower() or 'cit' in c.lower()), None)
+    col_citas = obtener_columna_citas(df)
             
     if col_citas is None:
         return {"error": "No se encontró la columna de Citas en el dataset."}
@@ -414,26 +433,13 @@ def calcular_proporcion_citadas(df):
 
 
 
-#--------------------------------------------------------------------------------------------
-
-
-
-#--------------------------------------------------------------------------------------------
-
-
-
-#--------------------------------------------------------------------------------------------
-
-
-
-#--------------------------------------------------------------------------------------------
 
 
 #--------------------------------------------------------------------------------------------
 
 def obtener_articulo_sin_citas(df):
  
-    col_citas = next((c for c in df.columns if 'cite' in c.lower()), None)
+    col_citas = obtener_columna_citas(df)
     if col_citas:
         serie = pd.to_numeric(df[col_citas], errors='coerce')
         return int((serie == 0).sum())   # NaN no cuenta como 0
@@ -445,7 +451,7 @@ def obtener_top_citas_anuales(df, top=10):
     anio_actual = datetime.datetime.now().year
     
     df = df.copy()
-    col_citas = next((c for c in df.columns if 'cite' in c.lower()), None)
+    col_citas = obtener_columna_citas(df)
     col_anios = next((c for c in df.columns if 'year' in c.lower() or 'año' in c.lower()), None)
     
     # Búsqueda dinámica del título
@@ -651,7 +657,7 @@ def distribucion_documentos(df):
     return {"error": "Columna no encontrada"}
 
 def calcular_h_index(df):
-    col_citas = next((c for c in df.columns if 'cite' in c.lower()), None)  
+    col_citas = obtener_columna_citas(df) 
     if col_citas is None:
         return 0
     citas = df[col_citas].fillna(0).astype(int).sort_values(ascending=False).tolist()
@@ -665,7 +671,7 @@ def calcular_h_index(df):
 
 def identificar_tendencias(df):
     try:
-        col_citas = next((c for c in df.columns if 'cite' in c.lower()), None)   
+        col_citas = obtener_columna_citas(df)   
         col_anio  = next((c for c in df.columns if 'year' in c.lower()), None)   
 
         if col_citas is None or col_anio is None:
@@ -710,7 +716,7 @@ def generar_grafo_palabras(df):
 
     nodes = [{"id": node, "size": G.degree(node)} for node in G.nodes()]      
     edges = [{"source": u, "target": v, "value": d['weight']} for u, v, d in G.edges(data=True)]
-    top_nodos = sorted(G.nodes(), key=lambda n: G.degree(n), reverse=True)[:50]
+    top_nodos = sorted(G.nodes(), key=lambda n: G.degree(n), reverse=True)[:20]
     subgrafo = G.subgraph(top_nodos)
     nodes = [{"id": node, "size": subgrafo.degree(node)} for node in subgrafo.nodes()]
     edges = [{"source": u, "target": v, "value": d['weight']} for u, v, d in subgrafo.edges(data=True)]
