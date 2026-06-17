@@ -710,4 +710,8 @@ def generar_grafo_palabras(df):
 
     nodes = [{"id": node, "size": G.degree(node)} for node in G.nodes()]      
     edges = [{"source": u, "target": v, "value": d['weight']} for u, v, d in G.edges(data=True)]
+    top_nodos = sorted(G.nodes(), key=lambda n: G.degree(n), reverse=True)[:50]
+    subgrafo = G.subgraph(top_nodos)
+    nodes = [{"id": node, "size": subgrafo.degree(node)} for node in subgrafo.nodes()]
+    edges = [{"source": u, "target": v, "value": d['weight']} for u, v, d in subgrafo.edges(data=True)]
     return {"nodes": nodes, "edges": edges}

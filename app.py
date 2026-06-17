@@ -224,12 +224,24 @@ def procesar_bibliometria(df, nombre_archivo):
     top_Ciudades = []
     top_universidades = []
 
+    def extraer_institucion(afiliacion):
+        partes = [p.strip() for p in afiliacion.split(',')]
+        keywords = ('university', 'universidad', 'institute', 'instituto',
+                    'college', 'tecnológico', 'tecnologico', 'school',
+                    'centre', 'center', 'centro', 'polytechnic', 'academia')
+        for parte in partes:
+            if any(k in parte.lower() for k in keywords):
+                return parte
+        return partes[0] if partes else None
+
     if col_afiliacion:
         serieUniversidades = df[col_afiliacion].dropna().astype(str)
         top_Afiliaciones = df[col_afiliacion].astype(str)\
             .str.split(',').str[0]\
             .value_counts().head(10).reset_index().values.tolist()
         
+
+
         serie_explotada = (
             serieUniversidades
             .str.split(';')       # parte cada celda en lista de afiliaciones
@@ -237,12 +249,22 @@ def procesar_bibliometria(df, nombre_archivo):
             .str.strip()          # quita espacios sobrantes
             .loc[lambda s: s != '']  # descarta strings vacíos
         )
+
+
+
         universidades = (
             serie_explotada
-            .str.split(',')
-            .str[0]             
+            .dropna()
+            .astype(str)
+            .apply(extraer_institucion)
+            .dropna()
+            .str.replace(r'\.', '', regex=True)
+            .str.replace(r'\s+', ' ', regex=True)
             .str.strip()
+            .loc[lambda s: s != '']
         )
+
+
         top_universidades = (
             universidades
             .value_counts()       # cuenta y ordena de mayor a menor automáticamente
@@ -445,6 +467,18 @@ def upload_file():
 @app.route('/historial', methods=['GET'])
 def obtener_historial():
     return jsonify({"datos": historial_busquedas[::-1]}), 200
+
+@app.route('/analisis/grafo-palabras', methods=['GET'])
+def grafo_palabras():
+    global ultimo_df_procesado
+    if ultimo_df_procesado is None:
+        return jsonify({"status": "error", "message": "No hay datos cargados"}), 400
+    try:
+        resultado = src.metrics.generar_grafo_palabras(ultimo_df_procesado)
+        return jsonify({"status": "success", "grafo": resultado}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 
 @app.route('/buscar', methods=['POST'])
 def buscar_datos():
