@@ -237,7 +237,7 @@
         Dropzone.autoDiscover = false;
         const miDropzone = new Dropzone("#upload-df", {
             paramName: "file",
-            maxFilesize: 20,
+            maxFilesize: 50,
             acceptedFiles: ".csv, .xls, .xlsx",
             dictDefaultMessage: "Arrastra archivos aquí o haz clic para analizar",
             addRemoveLinks: true,
@@ -376,6 +376,25 @@
                             data.datos.forEach(reg => {
                                 tablaH.innerHTML += `<tr><td style="padding:8px; border:1px solid #ddd;">${reg.archivo}</td><td style="padding:8px; border:1px solid #ddd; text-align:center;">${reg.filtro_inicio} - ${reg.filtro_fin}</td><td style="padding:8px; border:1px solid #ddd;">${reg.fecha}</td></tr>`;
                             });
+                        });
+
+                    //Faltaba poner esto en el front
+
+                    fetch('/analisis/conectores')
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.status === 'success') {
+                                // mostrar data.data en la sección de conectores
+                                mostrarConectores(data.data);
+                            }
+                        });
+
+                    fetch('/analisis/anomalias')
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.status === 'success') {
+                                mostrarAnomalias(data.casos_extraordinarios, data.total_anomalias_detectadas);
+                            }
                         });
 
 

@@ -294,7 +294,7 @@ def obtener_lista_paises(df):
 
     # --- Paso 2: extraer de Affiliations (Scopus) ---
     # Scopus usa "Affiliations" — buscar con nombre limpio
-    ## Arreglado para no tener errores al introducir archivos de WoS, "fallback" con address
+
     col_afil = next(
         (c for c in df.columns if 'affil' in c.lower() and not df[c].dropna().empty),
         None
@@ -517,9 +517,16 @@ def excel_descargar(df, resumen):
 
         # Hoja 5 — Países
         paises = resumen.get('tops', {}).get('paises', [])
+        paises = resumen.get('tops', {}).get('paises', [])
         if paises:
-            pd.DataFrame(paises, columns=['País', 'Frecuencia']).to_excel(
-                writer, sheet_name='Paises', index=False)
+            
+            df_paises = pd.DataFrame(paises) 
+            
+            
+            df_paises = df_paises.rename(columns={'pais': 'País', 'cantidad': 'Frecuencia'})
+            
+            
+            df_paises.to_excel(writer, sheet_name='Paises', index=False)
 
         # Hoja 6 — Revistas
         revistas = resumen.get('tops', {}).get('revistas', [])

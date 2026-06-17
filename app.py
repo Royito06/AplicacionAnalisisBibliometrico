@@ -16,10 +16,13 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
-from src.metrics import formatear_apa
+from src.metrics import formatear_apa, obtener_lista_paises
 
 
 app = Flask(__name__)
+
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024 # <- Esto es para aumentar el tamaño posible de los archivos
+                                                    # flask los limita en automatico
 
 # Para que Flask pueda recordar datos del usuario (Sesiones)
 app.secret_key = 'super_clave_secreta_bibliometrica' 
@@ -281,6 +284,10 @@ def procesar_bibliometria(df, nombre_archivo):
         df_citas['citas_por_anio'] = df_citas[col_citas] / df_citas['anios_activo']
 
         promedio_citas_anual = round(float(df_citas['citas_por_anio'].mean()), 2)
+    #---------------Cambio rápido para que salgan los países en el excel-----
+
+    lista_de_paises = obtener_lista_paises(df)
+
     # ---------------- Resultado ----------------
     resumen = {
         "confirmación": {
@@ -301,7 +308,8 @@ def procesar_bibliometria(df, nombre_archivo):
         },
         "tops": {
             "revistas": top_revistas,
-            "citados": top_citados
+            "citados": top_citados,
+            "paises": lista_de_paises
         },
         "Afiliaciones": {
             "ciudades": top_Ciudades,
